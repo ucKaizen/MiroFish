@@ -40,6 +40,9 @@ COPY backend ./backend
 # Copy only the built frontend assets from stage 1 (no node_modules)
 COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
 
+# Runtime-loaded translation files (backend reads ../../../locales/*.json)
+COPY locales ./locales
+
 # Static assets referenced by the upstream README — keep for completeness
 COPY static ./static
 
