@@ -37,8 +37,9 @@ def main():
     app = create_app()
     
     # 获取运行配置
+    # PORT (Railway/Heroku style) takes priority; fall back to FLASK_PORT; else 5001.
     host = os.environ.get('FLASK_HOST', '0.0.0.0')
-    port = int(os.environ.get('FLASK_PORT', 5001))
+    port = int(os.environ.get('PORT') or os.environ.get('FLASK_PORT') or 5001)
     debug = Config.DEBUG
     
     # 启动服务

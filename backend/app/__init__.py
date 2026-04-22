@@ -9,11 +9,17 @@ import warnings
 # 需要在所有其他导入之前设置
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
-from flask import Flask, request
+from flask import Flask, request, send_from_directory
 from flask_cors import CORS
 
 from .config import Config
 from .utils.logger import setup_logger, get_logger
+
+# Path to the pre-built Vue/Vite bundle (populated by the Docker build stage).
+# In local dev, this directory may be empty; Flask simply won't serve it.
+FRONTEND_DIST_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'dist')
+)
 
 
 def create_app(config_class=Config):
@@ -72,9 +78,20 @@ def create_app(config_class=Config):
     @app.route('/health')
     def health():
         return {'status': 'ok', 'service': 'MiroFish Backend'}
-    
+
+    # Serve the built Vue SPA. API routes above take precedence thanks to
+    # Flask's specificity-based matching, so /api/* and /health still win.
+    if os.path.isdir(FRONTEND_DIST_DIR):
+        @app.route('/', defaults={'path': ''})
+        @app.route('/<path:path>')
+        def serve_spa(path):
+            candidate = os.path.join(FRONTEND_DIST_DIR, path)
+            if path and os.path.isfile(candidate):
+                return send_from_directory(FRONTEND_DIST_DIR, path)
+            return send_from_directory(FRONTEND_DIST_DIR, 'index.html')
+
     if should_log_startup:
         logger.info("MiroFish Backend 启动完成")
-    
+
     return app
 

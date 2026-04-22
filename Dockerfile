@@ -1,36 +1,51 @@
-FROM python:3.11-slim
+# ------------------------------------------------------------------
+# Stage 1: Build the Vite/Vue frontend bundle.
+# Node is only needed here; the final image has no Node at all.
+# ------------------------------------------------------------------
+FROM node:20-slim AS frontend-builder
 
-# Install Node.js 20 (meets >=18) and minimal tooling
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
-  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-  && apt-get install -y --no-install-recommends nodejs \
-  && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
 
-# Copy uv from the official image
+# Install deps first for better layer caching
+COPY package.json package-lock.json ./
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+RUN npm ci --prefix frontend
+
+# Bring in the rest of the frontend + shared locales and build
+COPY frontend ./frontend
+COPY locales ./locales
+RUN npm run build --prefix frontend \
+  && rm -rf frontend/node_modules
+
+
+# ------------------------------------------------------------------
+# Stage 2: Python runtime. Only ships backend deps + built static assets.
+# ------------------------------------------------------------------
+FROM python:3.11-slim AS runtime
+
+# uv for Python deps
 COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
 
 WORKDIR /app
 
-# Copy dependency manifests first (better layer caching)
-COPY package.json package-lock.json ./
-COPY frontend/package.json frontend/package-lock.json ./frontend/
+# Install backend deps
 COPY backend/pyproject.toml backend/uv.lock ./backend/
+RUN cd backend \
+  && UV_LINK_MODE=copy uv sync --frozen --no-dev \
+  && rm -rf /root/.cache /tmp/* /var/tmp/*
 
-# Install dependencies (Node + Python)
-RUN npm ci \
-  && npm ci --prefix frontend \
-  && cd backend && uv sync --frozen
+# Copy backend source
+COPY backend ./backend
 
-# Copy the rest of the source
-COPY . .
+# Copy only the built frontend assets from stage 1 (no node_modules)
+COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
 
-# Build the frontend once at image-build time
-RUN npm run build --prefix frontend
+# Static assets referenced by the upstream README — keep for completeness
+COPY static ./static
 
-# Railway will inject $PORT; default 3000 for local runs
+# Railway injects $PORT; default 3000 for local docker runs
 ENV PORT=3000
-EXPOSE 3000 5001
+EXPOSE 3000
 
-# Start backend (5001) + vite preview serving built assets on $PORT
-CMD ["npm", "run", "start"]
+# Single process: Flask serves both the API and the built SPA on $PORT
+CMD ["sh", "-c", "cd backend && uv run --no-dev python run.py"]
