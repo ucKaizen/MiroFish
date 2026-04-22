@@ -47,9 +47,9 @@ Service **Settings** -> **Volumes** -> **+ New Volume**:
 
 Service **Settings** -> **Networking** -> **Generate Domain**.
 
-Railway picks the port from `$PORT` (set to 3000 by default in the Dockerfile). The public URL will look like `https://mirofish-production-xxxx.up.railway.app`.
+Railway picks the port from `$PORT` (default 3000 in the Dockerfile). The public URL will look like `https://mirofish-production-xxxx.up.railway.app`.
 
-The Flask backend on port 5001 stays internal. The Vite preview server proxies `/api/*` and `/health` to it.
+A single Flask process serves both the prebuilt Vue SPA (`/*`) and the API (`/api/*`, `/health`) on `$PORT` — no separate Node runtime in the final image.
 
 ## 5. Deploy
 
