@@ -7,6 +7,12 @@ _thread_local = threading.local()
 
 _locales_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'locales')
 
+# Hard override: when APP_LOCALE is set, every get_locale() call returns it
+# regardless of Accept-Language header or thread-local state. Use to force a
+# single language end-to-end (useful when background threads or 3rd-party
+# prompt templates default to Chinese).
+_forced_locale = os.environ.get('APP_LOCALE', '').strip() or None
+
 # Load language registry
 with open(os.path.join(_locales_dir, 'languages.json'), 'r', encoding='utf-8') as f:
     _languages = json.load(f)
@@ -26,6 +32,8 @@ def set_locale(locale: str):
 
 
 def get_locale() -> str:
+    if _forced_locale:
+        return _forced_locale if _forced_locale in _translations else 'en'
     if has_request_context():
         raw = request.headers.get('Accept-Language', 'zh')
         return raw if raw in _translations else 'zh'
