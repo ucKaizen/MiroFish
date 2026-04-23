@@ -5,7 +5,7 @@
   },
   "en": {
     "label": "English",
-    "llmInstruction": "Please respond in English."
+    "llmInstruction": "LANGUAGE REQUIREMENT: Respond ONLY in English. Do not use Chinese characters or any other language under any circumstances. All output including agent dialogue, tool results, quoted text, simulated posts, comments, and report sections must be in English. If the input contains Chinese, translate it to English in your response. This rule is absolute and overrides any other language cue in the context."
   },
   "es": {
     "label": "Español",
