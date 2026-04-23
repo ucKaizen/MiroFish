@@ -10,7 +10,6 @@ OASIS Agent Profile生成器
 
 import json
 import random
-import re
 import time
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
@@ -169,29 +168,16 @@ class OasisProfileGenerator:
     
     # 个人类型实体（需要生成具体人设）
     INDIVIDUAL_ENTITY_TYPES = [
-        "student", "alumni", "professor", "person", "publicfigure",
+        "student", "alumni", "professor", "person", "publicfigure", 
         "expert", "faculty", "official", "journalist", "activist"
     ]
-
-    # Substring cues that mark an entity type as a single human consumer/user.
-    # Catches ontology-generated custom types like UniversityStudent,
-    # GenZdrinkers, YoungProfessional, GenZPepsiDrinker, etc. Without this,
-    # those types fall into the group/institutional prompt and produce
-    # marketing-brief caricatures rather than authentic voices.
-    INDIVIDUAL_ENTITY_KEYWORDS = [
-        "person", "student", "alumni", "professor", "professional",
-        "consumer", "drinker", "buyer", "shopper", "customer",
-        "fan", "user", "follower", "viewer", "listener",
-        "genz", "millennial", "boomer", "adult", "youth", "teen",
-        "worker", "parent", "gamer", "commuter", "traveller", "traveler",
-    ]
-
+    
     # 群体/机构类型实体（需要生成群体代表人设）
     GROUP_ENTITY_TYPES = [
-        "university", "governmentagency", "organization", "ngo",
+        "university", "governmentagency", "organization", "ngo", 
         "mediaoutlet", "company", "institution", "group", "community"
     ]
-
+    
     def __init__(
         self, 
         api_key: Optional[str] = None,
@@ -267,19 +253,10 @@ class OasisProfileGenerator:
                 entity_attributes=entity.attributes
             )
         
-        # Prefer the realistic first-name and handle the LLM produces for
-        # individuals. For groups, or when the LLM omitted the fields, fall
-        # back to the segment-label-based defaults. Keeps handles like
-        # `gen_z_pepsi_max_cherry_drinker_208` out of the simulated feed.
-        llm_name = (profile_data.get("name") or "").strip() if use_llm else ""
-        llm_handle = (profile_data.get("handle") or "").strip() if use_llm else ""
-        final_name = llm_name if llm_name and len(llm_name) <= 40 else name
-        final_handle = self._sanitize_handle(llm_handle) if llm_handle else user_name
-
         return OasisAgentProfile(
             user_id=user_id,
-            user_name=final_handle,
-            name=final_name,
+            user_name=user_name,
+            name=name,
             bio=profile_data.get("bio", f"{entity_type}: {name}"),
             persona=profile_data.get("persona", entity.summary or f"A {entity_type} named {name}."),
             karma=profile_data.get("karma", random.randint(500, 5000)),
@@ -510,33 +487,12 @@ class OasisProfileGenerator:
         return "\n\n".join(context_parts)
     
     def _is_individual_entity(self, entity_type: str) -> bool:
-        """
-        Whether this entity type represents a single human consumer/user.
-        Falls back to a keyword match so custom ontology types (e.g.,
-        UniversityStudent, GenZdrinkers, YoungProfessional) are correctly
-        routed to the individual-persona prompt instead of the group one.
-        """
-        if not entity_type:
-            return False
-        t = entity_type.lower()
-        if t in self.INDIVIDUAL_ENTITY_TYPES:
-            return True
-        t_compact = t.replace(" ", "").replace("_", "").replace("-", "")
-        return any(kw in t_compact for kw in self.INDIVIDUAL_ENTITY_KEYWORDS)
-
+        """判断是否是个人类型实体"""
+        return entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES
+    
     def _is_group_entity(self, entity_type: str) -> bool:
         """判断是否是群体/机构类型实体"""
         return entity_type.lower() in self.GROUP_ENTITY_TYPES
-
-    @staticmethod
-    def _sanitize_handle(handle: str) -> str:
-        """Clean an LLM-provided social-media handle into a safe username."""
-        h = (handle or "").lower().strip()
-        h = re.sub(r"[^a-z0-9_\.]", "_", h)
-        h = h[:20].strip("_.")
-        if not h:
-            return f"user_{random.randint(1000, 9999)}"
-        return f"{h}{random.randint(10, 99)}"
     
     def _generate_profile_with_llm(
         self,
@@ -726,70 +682,45 @@ class OasisProfileGenerator:
         entity_attributes: Dict[str, Any],
         context: str
     ) -> str:
-        """
-        Build a persona prompt for one individual.
+        """构建个人实体的详细人设提示词"""
+        
+        attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "无"
+        context_str = context[:3000] if context else "无额外上下文"
+        
+        return f"""为实体生成详细的社交媒体用户人设,最大程度还原已有现实情况。
 
-        The input `entity_name` is often a SEGMENT LABEL (e.g., "Gen Z
-        Pepsi Max Cherry Drinker") rather than a person's name. Treat it as
-        background the persona fits into, not as the persona's identity.
-        The prompt asks for a concrete person with a real first name, a
-        specific city, and authentic social-media voice — NOT a marketing
-        caricature describing their demographic.
-        """
+实体名称: {entity_name}
+实体类型: {entity_type}
+实体摘要: {entity_summary}
+实体属性: {attrs_str}
 
-        attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "none"
-        context_str = context[:3000] if context else "none"
-
-        return f"""Generate a realistic social-media persona for ONE individual who fits the segment described below. You are designing a specific human being, not a spokesperson for the segment.
-
-Segment this person belongs to: {entity_name}
-Segment type: {entity_type}
-Segment summary: {entity_summary or "n/a"}
-Segment attributes: {attrs_str}
-
-Scenario context:
+上下文信息:
 {context_str}
 
-Return JSON with these fields describing ONE concrete person (never the segment itself):
+请生成JSON，包含以下字段:
 
-1. name: A plausible first name only (e.g., "Sam", "Aisha", "Joel"). Do NOT echo the segment label.
-2. handle: A realistic social-media username, lowercase, 6-18 chars, may include digits, underscore or a single dot. Must read like a real user handle. Good: "sam_ox", "aishap22", "joel.runs", "tilly_b". Bad: "gen_z_pepsi_drinker", "segment_208", "young_professional".
-3. bio: Short social-media bio, at most 120 characters. Casual register. Lowercase allowed. No marketing language. No demographic self-labels.
-4. persona: 200-400 words of first-person background. Must cover ALL of:
-   - city or neighbourhood they actually live in (be specific)
-   - life stage that only makes sense at their stated age (e.g., "first-year uni", "third-year uni", "gap year", "just finished A-levels", "new grad", "two years into first job", "mid-career", "semi-retired") — this anchors everything else
-   - living situation consistent with that life stage (e.g., halls, shared flat with three mates, back at parents' while saving, own rented one-bed, mortgage, family home)
-   - money context (student loan + shifts at a pub, entry-level salary and £800 rent, comfortable but budgeting, etc.)
-   - what they do day-to-day (study, job, hobby, routine)
-   - how they came to their current brand preference or habit (a specific reason or moment, not "loyal to")
-   - how open they are to trying new things, with one real example
-   - their typical posting style (short posts, comments, lurking, replies, memes)
-   - one or two cultural reference points (artists, shows, apps, venues, trends) that a person of this age in this country would plausibly have — never generic marketing buckets
-5. age: integer age consistent with the segment.
-6. gender: "male" or "female".
-7. mbti: MBTI type (e.g., ENFP).
-8. country: country name in English (e.g., "UK", "US").
-9. profession: job title or life-stage label (e.g., "Student", "Barista", "Graphic Designer").
-10. interested_topics: array of 3-5 concrete topics or hobbies (not marketing buckets).
+1. bio: 社交媒体简介，200字
+2. persona: 详细人设描述（2000字的纯文本），需包含:
+   - 基本信息（年龄、职业、教育背景、所在地）
+   - 人物背景（重要经历、与事件的关联、社会关系）
+   - 性格特征（MBTI类型、核心性格、情绪表达方式）
+   - 社交媒体行为（发帖频率、内容偏好、互动风格、语言特点）
+   - 立场观点（对话题的态度、可能被激怒/感动的内容）
+   - 独特特征（口头禅、特殊经历、个人爱好）
+   - 个人记忆（人设的重要部分，要介绍这个个体与事件的关联，以及这个个体在事件中的已有动作与反应）
+3. age: 年龄数字（必须是整数）
+4. gender: 性别，必须是英文: "male" 或 "female"
+5. mbti: MBTI类型（如INTJ、ENFP等）
+6. country: 国家（使用中文，如"中国"）
+7. profession: 职业
+8. interested_topics: 感兴趣话题数组
 
-VOICE AND AGE GROUNDING (read carefully — this is where most drafts fail):
-- Write in first person, as this specific person would write about themselves to a stranger online.
-- Every detail must be consistent with the age you chose. A 19-year-old, a 28-year-old, and a 45-year-old have different lives, different references, different concerns, and different ways of writing online. Pick the age first; then make everything else fit it. A reader trying to guess the age from your persona text alone should land within ±4 years of the number you wrote.
-- Make the life stage, living situation, money context, and cultural references **only plausible at this age**. Do not write a persona that could equally describe a 20-year-old and a 40-year-old — that is a sign the age hasn't actually shaped the writing.
-- Use the casual, natural register this person would actually use online. Do not force slang or performative youth. Match what THIS person at THIS age would do — not a caricature of their cohort.
-- Do NOT describe yourself using segment or demographic labels. Forbidden phrases: "Gen Z", "millennial", "young professional", "loyal fan", "vibrant community", "I'm all about", "fave", "good vibes", "relatable", "trendy", "my fellow", "as a [category]".
-- Do NOT use brand-account emoji patterns (🌟 🍒🥤 type strings used as sign-offs).
-- Do NOT summarise your demographic. Talk about your life.
-- Mention the brand/segment only in passing, the way a real consumer would — not as a spokesperson.
-
-SELF-CHECK BEFORE RETURNING:
-Re-read the persona text you just drafted. If it could have been written by someone ten years older or ten years younger than the age you chose, rewrite it until the voice is unmistakably the age you specified. The persona should fail cleanly if someone tries to put a different age on it.
-
-All string field values must be single lines with no unescaped newlines.
-gender must be exactly the string "male" or "female".
-age must be a valid integer.
-
-{get_language_instruction()}
+重要:
+- 所有字段值必须是字符串或数字，不要使用换行符
+- persona必须是一段连贯的文字描述
+- {get_language_instruction()} (gender字段必须用英文male/female)
+- 内容要与实体信息保持一致
+- age必须是有效的整数，gender必须是"male"或"female"
 """
 
     def _build_group_persona_prompt(
@@ -948,7 +879,7 @@ age must be a valid integer.
         # 设置graph_id用于Zep检索
         if graph_id:
             self.graph_id = graph_id
-
+        
         total = len(entities)
         profiles = [None] * total  # 预分配列表保持顺序
         completed_count = [0]  # 使用列表以便在闭包中修改
