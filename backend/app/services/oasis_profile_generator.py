@@ -9,11 +9,10 @@ OASIS Agent Profile生成器
 """
 
 import json
-import os
 import random
 import re
 import time
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -193,29 +192,6 @@ class OasisProfileGenerator:
         "mediaoutlet", "company", "institution", "group", "community"
     ]
 
-    # Entity types that should NEVER become chatty agents in the feed.
-    # Regulations, products, brands, events, dates, places, platforms, and
-    # campaigns exist in the knowledge graph as context but must not post.
-    # Letting them post pollutes sentiment, switch-signal, and narrative
-    # metrics with non-consumer voices.
-    NON_AGENT_ENTITY_TYPES = [
-        "event", "regulation", "law", "policy", "tax", "levy",
-        "product", "brand", "service", "sku",
-        "socialmediaplatform", "platform", "channel", "medium",
-        "marketingcampaign", "campaign", "initiative", "asset",
-        "date", "time", "year", "period", "era",
-        "location", "place", "region", "city", "country",
-        "concept", "idea", "trend", "phenomenon", "topic",
-    ]
-
-    # Substring match for ad-hoc non-agent types (e.g., "CocaColaBrand",
-    # "LondonLocation"). Applied after the exact list.
-    NON_AGENT_KEYWORDS = [
-        "brand", "product", "platform", "campaign", "regulation",
-        "law", "policy", "event", "date", "location", "levy", "tax",
-        "sku", "asset",
-    ]
-    
     def __init__(
         self, 
         api_key: Optional[str] = None,
@@ -551,29 +527,6 @@ class OasisProfileGenerator:
     def _is_group_entity(self, entity_type: str) -> bool:
         """判断是否是群体/机构类型实体"""
         return entity_type.lower() in self.GROUP_ENTITY_TYPES
-
-    def _is_agent_eligible(self, entity_type: str) -> bool:
-        """
-        Whether an entity of this type should become a posting agent.
-        Regulations, products, brands, platforms, events, dates, etc. are
-        excluded so they cannot speak in the simulated feed. Configurable
-        via the AGENT_DENY_TYPES env var (comma-separated list of types).
-        """
-        t = (entity_type or "").lower()
-        if t in self.NON_AGENT_ENTITY_TYPES:
-            return False
-
-        extra_deny = os.environ.get("AGENT_DENY_TYPES", "")
-        if extra_deny:
-            for token in extra_deny.split(","):
-                if token.strip().lower() == t:
-                    return False
-
-        t_compact = t.replace(" ", "").replace("_", "").replace("-", "")
-        if any(kw in t_compact for kw in self.NON_AGENT_KEYWORDS):
-            return False
-
-        return True
 
     @staticmethod
     def _sanitize_handle(handle: str) -> str:
@@ -987,28 +940,6 @@ age must be a valid integer.
         if graph_id:
             self.graph_id = graph_id
 
-        # Defect 1: filter out non-agent entities (brands, products, events,
-        # dates, platforms, regulations, locations, campaigns, etc.) before
-        # generating profiles. These pollute simulated sentiment and narrative
-        # metrics when they post. Skipped entities are logged for audit.
-        skipped: List[Tuple[str, str]] = []
-        filtered: List[EntityNode] = []
-        for e in entities:
-            et = e.get_entity_type() or "Entity"
-            if self._is_agent_eligible(et):
-                filtered.append(e)
-            else:
-                skipped.append((e.name, et))
-
-        if skipped:
-            logger.info(
-                f"Filtered {len(skipped)} non-agent entities before profile generation "
-                f"(extend deny list with AGENT_DENY_TYPES env var):"
-            )
-            for name, et in skipped:
-                logger.info(f"  skip: {name}  (type={et})")
-
-        entities = filtered
         total = len(entities)
         profiles = [None] * total  # 预分配列表保持顺序
         completed_count = [0]  # 使用列表以便在闭包中修改
