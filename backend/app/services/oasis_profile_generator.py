@@ -757,10 +757,14 @@ Return JSON with these fields describing ONE concrete person (never the segment 
 3. bio: Short social-media bio, at most 120 characters. Casual register. Lowercase allowed. No marketing language. No demographic self-labels.
 4. persona: 200-400 words of first-person background. Must cover ALL of:
    - city or neighbourhood they actually live in (be specific)
+   - life stage that only makes sense at their stated age (e.g., "first-year uni", "third-year uni", "gap year", "just finished A-levels", "new grad", "two years into first job", "mid-career", "semi-retired") — this anchors everything else
+   - living situation consistent with that life stage (e.g., halls, shared flat with three mates, back at parents' while saving, own rented one-bed, mortgage, family home)
+   - money context (student loan + shifts at a pub, entry-level salary and £800 rent, comfortable but budgeting, etc.)
    - what they do day-to-day (study, job, hobby, routine)
    - how they came to their current brand preference or habit (a specific reason or moment, not "loyal to")
    - how open they are to trying new things, with one real example
    - their typical posting style (short posts, comments, lurking, replies, memes)
+   - one or two cultural reference points (artists, shows, apps, venues, trends) that a person of this age in this country would plausibly have — never generic marketing buckets
 5. age: integer age consistent with the segment.
 6. gender: "male" or "female".
 7. mbti: MBTI type (e.g., ENFP).
@@ -768,13 +772,18 @@ Return JSON with these fields describing ONE concrete person (never the segment 
 9. profession: job title or life-stage label (e.g., "Student", "Barista", "Graphic Designer").
 10. interested_topics: array of 3-5 concrete topics or hobbies (not marketing buckets).
 
-VOICE RULES for the `persona` field and `bio`:
+VOICE AND AGE GROUNDING (read carefully — this is where most drafts fail):
 - Write in first person, as this specific person would write about themselves to a stranger online.
-- Use casual, natural social-media English. Lowercase is fine. Mild typos are fine. Short is fine.
-- Do NOT describe yourself using segment or demographic labels. Forbidden phrases include "Gen Z", "millennial", "loyal fan", "vibrant community", "I'm all about", "fave", "good vibes", "relatable", "trendy", "my fellow", "as a [category]".
+- Every detail must be consistent with the age you chose. A 19-year-old, a 28-year-old, and a 45-year-old have different lives, different references, different concerns, and different ways of writing online. Pick the age first; then make everything else fit it. A reader trying to guess the age from your persona text alone should land within ±4 years of the number you wrote.
+- Make the life stage, living situation, money context, and cultural references **only plausible at this age**. Do not write a persona that could equally describe a 20-year-old and a 40-year-old — that is a sign the age hasn't actually shaped the writing.
+- Use the casual, natural register this person would actually use online. Do not force slang or performative youth. Match what THIS person at THIS age would do — not a caricature of their cohort.
+- Do NOT describe yourself using segment or demographic labels. Forbidden phrases: "Gen Z", "millennial", "young professional", "loyal fan", "vibrant community", "I'm all about", "fave", "good vibes", "relatable", "trendy", "my fellow", "as a [category]".
 - Do NOT use brand-account emoji patterns (🌟 🍒🥤 type strings used as sign-offs).
-- Do NOT summarise your demographic. Talk about your actual life.
+- Do NOT summarise your demographic. Talk about your life.
 - Mention the brand/segment only in passing, the way a real consumer would — not as a spokesperson.
+
+SELF-CHECK BEFORE RETURNING:
+Re-read the persona text you just drafted. If it could have been written by someone ten years older or ten years younger than the age you chose, rewrite it until the voice is unmistakably the age you specified. The persona should fail cleanly if someone tries to put a different age on it.
 
 All string field values must be single lines with no unescaped newlines.
 gender must be exactly the string "male" or "female".
