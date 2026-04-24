@@ -9,9 +9,11 @@ OASIS Agent Profile生成器
 """
 
 import json
+import os
 import random
+import re
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -489,10 +491,114 @@ class OasisProfileGenerator:
     def _is_individual_entity(self, entity_type: str) -> bool:
         """判断是否是个人类型实体"""
         return entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES
-    
+
     def _is_group_entity(self, entity_type: str) -> bool:
         """判断是否是群体/机构类型实体"""
         return entity_type.lower() in self.GROUP_ENTITY_TYPES
+
+    # ----- Agent-eligibility filter -----
+    #
+    # Graphiti's extraction emits many entity nodes per seed — not just the
+    # named people we want to simulate (panelists, consumers). Occupations,
+    # locations, programmes, themes, ratings, and descriptor phrases all land
+    # as nodes. Without filtering, each of these becomes a posting agent,
+    # which pollutes the simulated feed and the final metrics.
+    #
+    # Two-layer filter:
+    #   1. The entity's label(s) must include a person-like type.
+    #   2. The entity's name must look like a real human name — short,
+    #      capitalised, no digits, not a common noise phrase.
+    #
+    # Works across studies because it doesn't hardcode scenario-specific
+    # terms (panelist names, programme names). For studies where the
+    # person-like types differ, extend PERSON_TYPE_LABELS or override via
+    # AGENT_ALLOW_TYPES env var.
+
+    PERSON_TYPE_LABELS = {
+        "Panelist", "Person", "Student", "Professional",
+        "Consumer", "Customer", "Drinker", "Buyer", "Shopper",
+        "Fan", "Viewer", "Reader", "Listener", "User",
+        "Worker", "Parent", "Employee", "Citizen",
+        "Alumni", "Professor", "Teacher", "Expert", "Official",
+        "Journalist", "Activist", "Celebrity",
+    }
+
+    NOISE_NAME_FRAGMENTS = (
+        "simulation participants",
+        "simulation participant",
+        "panel members",
+        "panelists",
+        "the panel",
+        "the flatmate",
+        "the children",
+        "the wife",
+        "the husband",
+        "the girlfriend",
+        "the boyfriend",
+        "the family",
+    )
+
+    def _looks_like_person_name(self, name: str) -> bool:
+        """Heuristic: does this string read as a human's first name (or
+        first + surname)? Rejects descriptor phrases, compound nouns with
+        possessives, and noise fragments."""
+        if not name:
+            return False
+        s = name.strip()
+        # Length bounds
+        if len(s) < 2 or len(s) > 40:
+            return False
+        # Digits break the pattern
+        if any(ch.isdigit() for ch in s):
+            return False
+        # Reject anything with possessive
+        if "'" in s or "'" in s:
+            return False
+        # Reject anything that's clearly a noise phrase
+        low = s.lower()
+        for frag in self.NOISE_NAME_FRAGMENTS:
+            if frag in low:
+                return False
+        # Must start with a capital letter (common-noun descriptors start
+        # lowercase; real names almost always Capitalised)
+        if not s[0].isupper():
+            return False
+        # Word count: 1-3 words is a person (e.g. "Margaret", "Raj", "Ann-Marie")
+        words = s.split()
+        if len(words) > 3:
+            return False
+        # Each word should be reasonably short and start with a capital
+        for w in words:
+            if len(w) > 20:
+                return False
+            if not re.match(r"^[A-Z][a-zA-Z\-]*$", w):
+                return False
+        return True
+
+    def _is_agent_eligible(
+        self,
+        entity: "EntityNode",
+        allowed_types: Optional[set] = None,
+    ) -> Tuple[bool, str]:
+        """Return (eligible, reason) for a single entity. `reason` is logged
+        for audit so testers can see exactly why each entity was kept or
+        skipped."""
+        labels = [lbl for lbl in (getattr(entity, "labels", []) or []) if lbl != "Entity"]
+        name = getattr(entity, "name", "") or ""
+
+        # Allow an env-var override of the type set (comma-separated)
+        types_to_check = allowed_types or self.PERSON_TYPE_LABELS
+        env_override = os.environ.get("AGENT_ALLOW_TYPES", "")
+        if env_override:
+            types_to_check = {t.strip() for t in env_override.split(",") if t.strip()}
+
+        if not any(lbl in types_to_check for lbl in labels):
+            return False, f"type-not-person (labels={labels})"
+
+        if not self._looks_like_person_name(name):
+            return False, f"name-not-human ('{name}')"
+
+        return True, "ok"
     
     def _generate_profile_with_llm(
         self,
@@ -879,7 +985,37 @@ class OasisProfileGenerator:
         # 设置graph_id用于Zep检索
         if graph_id:
             self.graph_id = graph_id
-        
+
+        # ----- Agent-eligibility filter -----
+        # Skip entities that don't look like named human participants.
+        # Graphiti extracts hundreds of noise nodes per seed (occupations,
+        # locations, themes, programmes). Without this filter, each becomes
+        # a posting agent and pollutes every simulation metric.
+        skipped: List[Tuple[str, str, str]] = []
+        eligible: List[EntityNode] = []
+        for e in entities:
+            ok, reason = self._is_agent_eligible(e)
+            if ok:
+                eligible.append(e)
+            else:
+                labels_str = ",".join(getattr(e, "labels", []) or [])
+                skipped.append((getattr(e, "name", "") or "", labels_str, reason))
+
+        if skipped:
+            logger.info(
+                f"Agent filter: kept {len(eligible)}/{len(entities)} entities "
+                f"(skipped {len(skipped)})."
+            )
+            # Log up to the first 30 skipped so testers can audit without
+            # drowning the log for huge graphs.
+            for name, labels_str, reason in skipped[:30]:
+                logger.info(f"  skip: {name!r}  [{labels_str}]  {reason}")
+            if len(skipped) > 30:
+                logger.info(f"  ... and {len(skipped) - 30} more")
+        else:
+            logger.info(f"Agent filter: kept all {len(eligible)} entities.")
+
+        entities = eligible
         total = len(entities)
         profiles = [None] * total  # 预分配列表保持顺序
         completed_count = [0]  # 使用列表以便在闭包中修改
