@@ -31,7 +31,7 @@ WORKDIR /app
 # Install backend deps
 COPY backend/pyproject.toml backend/uv.lock ./backend/
 RUN cd backend \
-  && UV_LINK_MODE=copy uv sync --frozen --no-dev \
+  && UV_LINK_MODE=copy uv sync --no-dev \
   && rm -rf /root/.cache /tmp/* /var/tmp/*
 
 # Copy backend source

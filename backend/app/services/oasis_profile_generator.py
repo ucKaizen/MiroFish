@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from openai import OpenAI
-from zep_cloud.client import Zep
+from .zep_compat import Zep
 
 from ..config import Config
 from ..utils.logger import get_logger
