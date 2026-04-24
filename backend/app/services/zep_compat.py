@@ -43,6 +43,35 @@ from graphiti_core.nodes import EpisodeType
 from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.embedder import OpenAIEmbedder, OpenAIEmbedderConfig
 
+
+class _SafeOpenAIEmbedder(OpenAIEmbedder):
+    """Wraps OpenAIEmbedder to short-circuit calls with empty input arrays.
+
+    Graphiti 0.11.6 occasionally calls the embedder with an empty list when
+    a dedup pass leaves nothing new to embed. OpenAI's embeddings endpoint
+    rejects this with HTTP 400 "Invalid 'input': input cannot be an empty
+    array.", which crashes the entire graph build. Returning an empty list
+    in that case is the correct semantic — there's nothing to embed."""
+
+    async def create(self, input_data, *args, **kwargs):
+        # input_data may be a string or list[str]. Empty list / empty string -> empty result.
+        if input_data is None:
+            return []
+        if isinstance(input_data, list) and len(input_data) == 0:
+            return []
+        if isinstance(input_data, str) and not input_data.strip():
+            return []
+        return await super().create(input_data, *args, **kwargs)
+
+    async def create_batch(self, input_data_list, *args, **kwargs):
+        if not input_data_list:
+            return []
+        # Filter out empty strings before forwarding
+        cleaned = [s for s in input_data_list if s and (not isinstance(s, str) or s.strip())]
+        if not cleaned:
+            return []
+        return await super().create_batch(cleaned, *args, **kwargs)
+
 logger = logging.getLogger("mirofish.zep_compat")
 
 # ---------------------------------------------------------------------------
@@ -126,7 +155,9 @@ def _get_graphiti() -> Tuple[Graphiti, asyncio.AbstractEventLoop]:
             user=Config.NEO4J_USER,
             password=Config.NEO4J_PASSWORD,
             llm_client=OpenAIClient(config=llm_conf),
-            embedder=OpenAIEmbedder(config=embedder_conf),
+            # Use the safe wrapper so dedup passes that yield empty
+            # batches don't crash the entire graph build.
+            embedder=_SafeOpenAIEmbedder(config=embedder_conf),
         )
         # Build indices once. Safe to call repeatedly; subsequent threads
         # hit "equivalent schema rule already exists" which we can ignore.
