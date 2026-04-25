@@ -28,6 +28,49 @@ from .zep_entity_reader import EntityNode, ZepEntityReader
 logger = get_logger('mirofish.oasis_profile')
 
 
+# ----- Ontology-aware agent-eligibility helper -----
+#
+# PR #16's ontology-generator prompt demands that every entity-type
+# description include phrases like "named individual", "real human", or
+# "real person" when the type refers to humans. This lets us derive the
+# set of agent-eligible types directly from a project's ontology, rather
+# than maintaining a hardcoded list — adapts to whatever creative type
+# names the LLM invents (TechnologyManager, RetiredEngineer, YoungAdult,
+# CommunityCoordinator, etc.).
+
+_AGENT_DESCRIPTION_MARKERS = (
+    "named individual",
+    "individual human",
+    "real human",
+    "real person",
+    "single named human",
+)
+
+
+def derive_agent_eligible_types(ontology: Optional[Dict[str, Any]]) -> Optional[set]:
+    """Inspect an ontology dict and return the set of entity-type names
+    whose descriptions identify them as named human individuals.
+
+    Returns None when no ontology is supplied (caller falls back to the
+    hardcoded :pyattr:`OasisProfileGenerator.PERSON_TYPE_LABELS`). Returns
+    an empty set if the ontology contains no human-typed entries — that
+    would be an extreme case worth surfacing in logs."""
+    if not ontology:
+        return None
+    types = ontology.get("entity_types") or []
+    if not types:
+        return None
+    eligible = set()
+    for t in types:
+        name = t.get("name")
+        desc = (t.get("description") or "").lower()
+        if not name:
+            continue
+        if any(marker in desc for marker in _AGENT_DESCRIPTION_MARKERS):
+            eligible.add(name)
+    return eligible
+
+
 @dataclass
 class OasisAgentProfile:
     """OASIS Agent Profile数据结构"""
@@ -962,7 +1005,8 @@ class OasisProfileGenerator:
         graph_id: Optional[str] = None,
         parallel_count: int = 5,
         realtime_output_path: Optional[str] = None,
-        output_platform: str = "reddit"
+        output_platform: str = "reddit",
+        agent_eligible_types: Optional[set] = None,
     ) -> List[OasisAgentProfile]:
         """
         批量从实体生成Agent Profile（支持并行生成）
@@ -991,10 +1035,20 @@ class OasisProfileGenerator:
         # Graphiti extracts hundreds of noise nodes per seed (occupations,
         # locations, themes, programmes). Without this filter, each becomes
         # a posting agent and pollutes every simulation metric.
+        if agent_eligible_types is not None:
+            logger.info(
+                f"Agent filter: using ontology-derived eligible types "
+                f"({len(agent_eligible_types)}): {sorted(agent_eligible_types)}"
+            )
+        else:
+            logger.info(
+                f"Agent filter: no ontology-derived types; "
+                f"falling back to hardcoded PERSON_TYPE_LABELS"
+            )
         skipped: List[Tuple[str, str, str]] = []
         eligible: List[EntityNode] = []
         for e in entities:
-            ok, reason = self._is_agent_eligible(e)
+            ok, reason = self._is_agent_eligible(e, allowed_types=agent_eligible_types)
             if ok:
                 eligible.append(e)
             else:
