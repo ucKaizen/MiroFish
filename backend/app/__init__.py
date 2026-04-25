@@ -79,6 +79,31 @@ def create_app(config_class=Config):
     def health():
         return {'status': 'ok', 'service': 'MiroFish Backend'}
 
+    # Version / commit info — proves which build is actually running.
+    # Reads RAILWAY_GIT_* env vars that Railway injects automatically at
+    # build/deploy time. Falls back to a local `git rev-parse` for dev.
+    @app.route('/version')
+    def version():
+        import subprocess
+        sha = os.environ.get("RAILWAY_GIT_COMMIT_SHA") or ""
+        if not sha:
+            try:
+                sha = subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"],
+                    stderr=subprocess.DEVNULL,
+                    cwd=os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")),
+                ).decode().strip()
+            except Exception:
+                sha = "unknown"
+        return {
+            "commit": sha[:12] if sha else "unknown",
+            "commit_full": sha or "unknown",
+            "branch": os.environ.get("RAILWAY_GIT_BRANCH", "local"),
+            "message": (os.environ.get("RAILWAY_GIT_COMMIT_MESSAGE", "") or "")[:200],
+            "deployment_id": os.environ.get("RAILWAY_DEPLOYMENT_ID", "local"),
+            "service": os.environ.get("RAILWAY_SERVICE_NAME", "MiroFish"),
+        }
+
     # Serve the built Vue SPA. API routes above take precedence thanks to
     # Flask's specificity-based matching, so /api/* and /health still win.
     if os.path.isdir(FRONTEND_DIST_DIR):
