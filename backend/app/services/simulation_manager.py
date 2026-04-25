@@ -235,7 +235,8 @@ class SimulationManager:
         defined_entity_types: Optional[List[str]] = None,
         use_llm_for_profiles: bool = True,
         progress_callback: Optional[callable] = None,
-        parallel_profile_count: int = 3
+        parallel_profile_count: int = 3,
+        agent_eligible_types: Optional[set] = None,
     ) -> SimulationState:
         """
         准备模拟环境（全程自动化）
@@ -343,7 +344,8 @@ class SimulationManager:
                 graph_id=state.graph_id,  # 传入graph_id用于Zep检索
                 parallel_count=parallel_profile_count,  # 并行生成数量
                 realtime_output_path=realtime_output_path,  # 实时保存路径
-                output_platform=realtime_platform  # 输出格式
+                output_platform=realtime_platform,  # 输出格式
+                agent_eligible_types=agent_eligible_types,  # ontology-derived
             )
             
             state.profiles_count = len(profiles)

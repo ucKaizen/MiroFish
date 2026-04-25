@@ -10,7 +10,7 @@ from flask import request, jsonify, send_file
 from . import simulation_bp
 from ..config import Config
 from ..services.zep_entity_reader import ZepEntityReader
-from ..services.oasis_profile_generator import OasisProfileGenerator
+from ..services.oasis_profile_generator import OasisProfileGenerator, derive_agent_eligible_types
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner, RunnerStatus
 from ..utils.logger import get_logger
@@ -580,6 +580,24 @@ def prepare_simulation():
                         progress_detail=progress_detail_data
                     )
                 
+                # Derive the per-study set of agent-eligible entity types
+                # from this project's ontology. The ontology generator's
+                # prompt (PR #16) requires every human type's description
+                # to contain phrases like "named individual" / "real human";
+                # the helper scans for those markers. Result is the set of
+                # type names to keep at profile generation time, regardless
+                # of how creative the LLM was with naming
+                # (TechnologyManager, RetiredEngineer, YoungAdult, etc.).
+                agent_eligible_types = derive_agent_eligible_types(
+                    project.ontology if project else None
+                )
+                if agent_eligible_types:
+                    logger.info(
+                        f"Ontology-derived agent-eligible types "
+                        f"({len(agent_eligible_types)}): "
+                        f"{sorted(agent_eligible_types)}"
+                    )
+
                 result_state = manager.prepare_simulation(
                     simulation_id=simulation_id,
                     simulation_requirement=simulation_requirement,
@@ -587,7 +605,8 @@ def prepare_simulation():
                     defined_entity_types=entity_types_list,
                     use_llm_for_profiles=use_llm_for_profiles,
                     progress_callback=progress_callback,
-                    parallel_profile_count=parallel_profile_count
+                    parallel_profile_count=parallel_profile_count,
+                    agent_eligible_types=agent_eligible_types,
                 )
                 
                 # 任务完成
