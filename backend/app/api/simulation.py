@@ -814,11 +814,46 @@ def get_simulation(simulation_id: str):
         }), 500
 
 
+@simulation_bp.route('/<simulation_id>', methods=['DELETE'])
+def delete_simulation(simulation_id: str):
+    """
+    Delete a simulation (its on-disk directory) and, by default, its
+    linked report. Use ?cascade_report=false to keep the report.
+
+    Returns 404 if the simulation directory does not exist.
+    """
+    try:
+        cascade_param = request.args.get('cascade_report', 'true').lower()
+        cascade_report = cascade_param != 'false'
+
+        manager = SimulationManager()
+        outcome = manager.delete_simulation(simulation_id, cascade_report=cascade_report)
+
+        if not outcome.get("deleted_simulation"):
+            return jsonify({
+                "success": False,
+                "error": f"Simulation not found: {simulation_id}"
+            }), 404
+
+        return jsonify({
+            "success": True,
+            "data": outcome,
+            "message": f"Simulation deleted: {simulation_id}"
+        })
+    except Exception as e:
+        logger.error(f"删除模拟失败: {simulation_id}, error={str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
 @simulation_bp.route('/list', methods=['GET'])
 def list_simulations():
     """
     列出所有模拟
-    
+
     Query参数：
         project_id: 按项目ID过滤（可选）
     """

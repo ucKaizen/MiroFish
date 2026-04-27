@@ -465,20 +465,59 @@ class SimulationManager:
     def list_simulations(self, project_id: Optional[str] = None) -> List[SimulationState]:
         """列出所有模拟"""
         simulations = []
-        
+
         if os.path.exists(self.SIMULATION_DATA_DIR):
             for sim_id in os.listdir(self.SIMULATION_DATA_DIR):
                 # 跳过隐藏文件（如 .DS_Store）和非目录文件
                 sim_path = os.path.join(self.SIMULATION_DATA_DIR, sim_id)
                 if sim_id.startswith('.') or not os.path.isdir(sim_path):
                     continue
-                
+
                 state = self._load_simulation_state(sim_id)
                 if state:
                     if project_id is None or state.project_id == project_id:
                         simulations.append(state)
-        
+
         return simulations
+
+    def delete_simulation(self, simulation_id: str, cascade_report: bool = True) -> Dict[str, Any]:
+        """
+        Delete a simulation directory (and optionally its linked report).
+
+        Args:
+            simulation_id: Simulation ID to delete
+            cascade_report: If True, also delete the report linked via state.report_id
+
+        Returns:
+            {"deleted_simulation": bool, "deleted_report": bool, "report_id": Optional[str]}
+        """
+        result = {"deleted_simulation": False, "deleted_report": False, "report_id": None}
+
+        sim_dir = self._get_simulation_dir(simulation_id)
+        if not os.path.exists(sim_dir):
+            return result
+
+        # Capture linked report_id before we wipe state
+        linked_report_id: Optional[str] = None
+        if cascade_report:
+            state = self._load_simulation_state(simulation_id)
+            if state is not None:
+                linked_report_id = getattr(state, "report_id", None)
+
+        shutil.rmtree(sim_dir)
+        result["deleted_simulation"] = True
+        logger.info(f"Simulation deleted: {simulation_id}")
+
+        if cascade_report and linked_report_id:
+            try:
+                from .report_agent import ReportAgent
+                if ReportAgent.delete_report(linked_report_id):
+                    result["deleted_report"] = True
+                result["report_id"] = linked_report_id
+            except Exception as exc:
+                logger.warning(f"Failed to cascade-delete report {linked_report_id}: {exc}")
+
+        return result
     
     def get_profiles(self, simulation_id: str, platform: str = "reddit") -> List[Dict[str, Any]]:
         """获取模拟的Agent Profile"""
