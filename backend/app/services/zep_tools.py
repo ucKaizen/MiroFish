@@ -1348,18 +1348,34 @@ class ZepToolsService:
         # 将问题合并为一个采访prompt
         combined_prompt = "\n".join([f"{i+1}. {q}" for i, q in enumerate(result.interview_questions)])
         
-        # 添加优化前缀，约束Agent回复格式
-        INTERVIEW_PROMPT_PREFIX = (
-            "你正在接受一次采访。请结合你的人设、所有的过往记忆与行动，"
-            "以纯文本方式直接回答以下问题。\n"
-            "回复要求：\n"
-            "1. 直接用自然语言回答，不要调用任何工具\n"
-            "2. 不要返回JSON格式或工具调用格式\n"
-            "3. 不要使用Markdown标题（如#、##、###）\n"
-            "4. 按问题编号逐一回答，每个回答以「问题X：」开头（X为问题编号）\n"
-            "5. 每个问题的回答之间用空行分隔\n"
-            "6. 回答要有实质内容，每个问题至少回答2-3句话\n\n"
-        )
+        # 添加优化前缀，约束Agent回复格式（locale-aware）
+        if get_locale() == 'zh':
+            INTERVIEW_PROMPT_PREFIX = (
+                "你正在接受一次采访。请结合你的人设、所有的过往记忆与行动，"
+                "以纯文本方式直接回答以下问题。\n"
+                "回复要求：\n"
+                "1. 直接用自然语言回答，不要调用任何工具\n"
+                "2. 不要返回JSON格式或工具调用格式\n"
+                "3. 不要使用Markdown标题（如#、##、###）\n"
+                "4. 按问题编号逐一回答，每个回答以「问题X：」开头（X为问题编号）\n"
+                "5. 每个问题的回答之间用空行分隔\n"
+                "6. 回答要有实质内容，每个问题至少回答2-3句话\n\n"
+            )
+        else:
+            INTERVIEW_PROMPT_PREFIX = (
+                "You are being interviewed. Drawing on your persona and all past "
+                "memories and actions, answer the following questions directly in "
+                "plain English text.\n"
+                "Reply requirements:\n"
+                "1. Answer in natural language; do not call any tools.\n"
+                "2. Do not return JSON or any tool-call format.\n"
+                "3. Do not use Markdown headings (#, ##, ###).\n"
+                "4. Answer each question in order, prefixing each answer with "
+                "\"Question X:\" (where X is the question number).\n"
+                "5. Separate the answer for each question with a blank line.\n"
+                "6. Provide substantive answers — at least 2-3 sentences per "
+                "question.\n\n"
+            )
         optimized_prompt = f"{INTERVIEW_PROMPT_PREFIX}{combined_prompt}"
         
         # Step 4: 调用真实的采访API（不指定platform，默认双平台同时采访）
@@ -1639,9 +1655,11 @@ class ZepToolsService:
     ) -> List[str]:
         """使用LLM生成采访问题"""
         
-        agent_roles = [a.get("profession", "未知") for a in selected_agents]
-        
-        system_prompt = """你是一个专业的记者/采访者。根据采访需求，生成3-5个深度采访问题。
+        is_zh = get_locale() == 'zh'
+        agent_roles = [a.get("profession", "未知" if is_zh else "unknown") for a in selected_agents]
+
+        if is_zh:
+            system_prompt = """你是一个专业的记者/采访者。根据采访需求，生成3-5个深度采访问题。
 
 问题要求：
 1. 开放性问题，鼓励详细回答
@@ -1653,13 +1671,49 @@ class ZepToolsService:
 
 返回JSON格式：{"questions": ["问题1", "问题2", ...]}"""
 
-        user_prompt = f"""采访需求：{interview_requirement}
+            user_prompt = f"""采访需求：{interview_requirement}
 
 模拟背景：{simulation_requirement if simulation_requirement else "未提供"}
 
 采访对象角色：{', '.join(agent_roles)}
 
 请生成3-5个采访问题。"""
+
+            fallback_first = f"关于{interview_requirement}，您有什么看法？"
+            fallback_full = [
+                f"关于{interview_requirement}，您的观点是什么？",
+                "这件事对您或您所代表的群体有什么影响？",
+                "您认为应该如何解决或改进这个问题？"
+            ]
+        else:
+            system_prompt = """You are a professional journalist / interviewer. Based on the interview brief, generate 3-5 in-depth interview questions.
+
+Requirements for the questions:
+1. Open-ended, inviting detailed answers
+2. Likely to elicit different answers from different roles
+3. Cover facts, opinions, and feelings
+4. Natural phrasing, like a real interview
+5. Each question under ~30 words, concise
+6. Ask directly — no preamble or framing inside the question
+
+Return JSON: {"questions": ["question 1", "question 2", ...]}
+
+Write the questions in English."""
+
+            user_prompt = f"""Interview brief: {interview_requirement}
+
+Simulation background: {simulation_requirement if simulation_requirement else "not provided"}
+
+Interviewee roles: {', '.join(agent_roles)}
+
+Generate 3-5 interview questions in English."""
+
+            fallback_first = f"Regarding {interview_requirement}, what is your view?"
+            fallback_full = [
+                f"Regarding {interview_requirement}, what is your view?",
+                "How does this affect you or the group you represent?",
+                "How do you think this should be addressed or improved?"
+            ]
 
         try:
             response = self.llm.chat_json(
@@ -1669,16 +1723,12 @@ class ZepToolsService:
                 ],
                 temperature=0.5
             )
-            
-            return response.get("questions", [f"关于{interview_requirement}，您有什么看法？"])
-            
+
+            return response.get("questions", [fallback_first])
+
         except Exception as e:
             logger.warning(t("console.generateInterviewQuestionsFailed", error=e))
-            return [
-                f"关于{interview_requirement}，您的观点是什么？",
-                "这件事对您或您所代表的群体有什么影响？",
-                "您认为应该如何解决或改进这个问题？"
-            ]
+            return fallback_full
     
     def _generate_interview_summary(
         self,
@@ -1687,16 +1737,22 @@ class ZepToolsService:
     ) -> str:
         """生成采访摘要"""
         
+        is_zh = get_locale() == 'zh'
+
         if not interviews:
-            return "未完成任何采访"
-        
+            return "未完成任何采访" if is_zh else "No interviews completed."
+
         # 收集所有采访内容
         interview_texts = []
         for interview in interviews:
-            interview_texts.append(f"【{interview.agent_name}（{interview.agent_role}）】\n{interview.response[:500]}")
-        
-        quote_instruction = "引用受访者原话时使用中文引号「」" if get_locale() == 'zh' else 'Use quotation marks "" when quoting interviewees'
-        system_prompt = f"""你是一个专业的新闻编辑。请根据多位受访者的回答，生成一份采访摘要。
+            if is_zh:
+                interview_texts.append(f"【{interview.agent_name}（{interview.agent_role}）】\n{interview.response[:500]}")
+            else:
+                interview_texts.append(f"[{interview.agent_name} ({interview.agent_role})]\n{interview.response[:500]}")
+
+        if is_zh:
+            quote_instruction = "引用受访者原话时使用中文引号「」"
+            system_prompt = f"""你是一个专业的新闻编辑。请根据多位受访者的回答，生成一份采访摘要。
 
 摘要要求：
 1. 提炼各方主要观点
@@ -1712,12 +1768,37 @@ class ZepToolsService:
 - {quote_instruction}
 - 可以使用**加粗**标记关键词，但不要使用其他Markdown语法"""
 
-        user_prompt = f"""采访主题：{interview_requirement}
+            user_prompt = f"""采访主题：{interview_requirement}
 
 采访内容：
 {"".join(interview_texts)}
 
 请生成采访摘要。"""
+        else:
+            quote_instruction = 'Use straight quotation marks "" when quoting interviewees'
+            system_prompt = f"""You are a professional news editor. Based on multiple interviewees' answers, write an interview summary in English.
+
+Summary requirements:
+1. Distil the main view of each side
+2. Identify points of consensus and disagreement
+3. Highlight valuable direct quotes
+4. Stay neutral; do not favour any side
+5. Keep under ~600 words
+
+Format constraints (must obey):
+- Plain-text paragraphs separated by blank lines
+- No Markdown headings (#, ##, ###)
+- No horizontal rules (---, ***)
+- {quote_instruction}
+- You may use **bold** for keywords, but no other Markdown
+- Write the entire summary in English."""
+
+            user_prompt = f"""Interview topic: {interview_requirement}
+
+Interview content:
+{"".join(interview_texts)}
+
+Generate the interview summary in English."""
 
         try:
             summary = self.llm.chat(
@@ -1729,8 +1810,10 @@ class ZepToolsService:
                 max_tokens=800
             )
             return summary
-            
+
         except Exception as e:
             logger.warning(t("console.generateInterviewSummaryFailed", error=e))
             # 降级：简单拼接
-            return f"共采访了{len(interviews)}位受访者，包括：" + "、".join([i.agent_name for i in interviews])
+            if is_zh:
+                return f"共采访了{len(interviews)}位受访者，包括：" + "、".join([i.agent_name for i in interviews])
+            return f"Interviewed {len(interviews)} respondents: " + ", ".join([i.agent_name for i in interviews])

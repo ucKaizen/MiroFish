@@ -20,27 +20,37 @@ from ..models.project import ProjectManager
 logger = get_logger('mirofish.api.simulation')
 
 
-# Interview prompt 优化前缀
-# 添加此前缀可以避免Agent调用工具，直接用文本回复
-INTERVIEW_PROMPT_PREFIX = "结合你的人设、所有的过往记忆与行动，不调用任何工具直接用文本回复我："
+# Interview prompt 优化前缀（locale-aware：英文部署时用英文，否则中文）
+# 添加此前缀可以避免Agent调用工具，直接用文本回复，并保持回复语言一致
+_INTERVIEW_PROMPT_PREFIX_ZH = "结合你的人设、所有的过往记忆与行动，不调用任何工具直接用文本回复我："
+_INTERVIEW_PROMPT_PREFIX_EN = (
+    "Drawing on your persona and all past memories and actions, "
+    "reply directly in plain English text without calling any tools. "
+    "Answer the following:\n"
+)
+
+
+def _interview_prefix() -> str:
+    return _INTERVIEW_PROMPT_PREFIX_ZH if get_locale() == 'zh' else _INTERVIEW_PROMPT_PREFIX_EN
 
 
 def optimize_interview_prompt(prompt: str) -> str:
     """
     优化Interview提问，添加前缀避免Agent调用工具
-    
+
     Args:
         prompt: 原始提问
-        
+
     Returns:
         优化后的提问
     """
     if not prompt:
         return prompt
-    # 避免重复添加前缀
-    if prompt.startswith(INTERVIEW_PROMPT_PREFIX):
+    prefix = _interview_prefix()
+    # 避免重复添加前缀（任一语言）
+    if prompt.startswith(prefix) or prompt.startswith(_INTERVIEW_PROMPT_PREFIX_ZH) or prompt.startswith(_INTERVIEW_PROMPT_PREFIX_EN):
         return prompt
-    return f"{INTERVIEW_PROMPT_PREFIX}{prompt}"
+    return f"{prefix}{prompt}"
 
 
 # ============== 实体读取接口 ==============
