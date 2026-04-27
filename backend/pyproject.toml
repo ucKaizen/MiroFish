@@ -23,6 +23,11 @@ dependencies = [
     # OASIS 社交媒体模拟
     "camel-oasis==0.2.5",
     "camel-ai==0.2.78",
+
+    # Pulled transitively by camel-ai. Listed directly so the [tool.uv.sources]
+    # CPU-only override below actually applies (uv only honours source pins on
+    # direct deps).
+    "torch",
     
     # 文件处理
     "PyMuPDF>=1.24.0",
@@ -54,3 +59,15 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+# Pin torch to CPU-only wheels on Linux. MiroFish runs inference via the
+# OpenAI API; the default Linux torch wheel ships ~6 GB of CUDA libraries
+# that are never touched at runtime and were timing out Railway's image
+# export. macOS dev keeps the default (Metal/CPU) wheel.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
