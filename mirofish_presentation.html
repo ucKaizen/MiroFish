@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiroFish — BBC Panel Simulation</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #0f172a;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --accent: #bb1919;
+    --accent-soft: #fde7e7;
+    --box: #f8fafc;
+    --good: #166534;
+    --good-soft: #dcfce7;
+    --warn: #b45309;
+    --warn-soft: #fef3c7;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+    color: var(--fg); background: #e5e7eb;
+  }
+  .deck { display: flex; align-items: center; justify-content: center; height: 100vh; }
+  .slide {
+    display: none;
+    width: min(1280px, 96vw);
+    aspect-ratio: 16 / 9;
+    background: var(--bg);
+    padding: 44px 52px 36px;
+    border-radius: 8px;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.15);
+    position: relative;
+    overflow: hidden;
+  }
+  .slide.active { display: flex; flex-direction: column; }
+  .slide header { border-bottom: 2px solid var(--accent); padding-bottom: 10px; margin-bottom: 18px; }
+  .slide h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+  .slide .subtitle { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
+  .slide .body { flex: 1; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  .footnote { font-size: 11.5px; color: var(--muted); margin-top: auto; padding-top: 10px; border-top: 1px dashed var(--line); line-height: 1.5; }
+  .footnote strong { color: var(--fg); }
+
+  /* Nav controls */
+  .ctrl { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; font-size: 13px; color: #334155; background: rgba(255,255,255,0.95); padding: 6px 12px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .ctrl button { border: 1px solid var(--line); background: #fff; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .ctrl button:hover { background: var(--box); }
+
+  /* ─── Slide 0: executive brief ────────────────────────────────────── */
+  .exec-summary { background: var(--box); border-left: 3px solid var(--accent); padding: 12px 16px; font-size: 13px; line-height: 1.55; }
+  .exec-summary strong { color: var(--accent); }
+  .exec-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; flex: 1; min-height: 0; margin-top: 4px; }
+  .exec-grid .card h3 { margin: 0 0 8px; font-size: 11.5px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+  .exec-grid .card ul { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.55; }
+  .exec-grid .card li { margin-bottom: 5px; }
+  .exec-grid .card li strong { color: var(--fg); }
+
+  /* ─── Slide 1: pipeline block diagram ─────────────────────────────── */
+  .pipe-flow { display: grid; grid-template-columns: 1fr 18px 1fr 18px 1fr 18px 1fr 18px 1fr; align-items: stretch; gap: 4px; margin-top: 4px; }
+  .pipe-node { background: #fff; border: 1.5px solid var(--line); border-radius: 8px; padding: 12px 12px 14px; position: relative; display: flex; flex-direction: column; gap: 4px; min-height: 138px; }
+  .pipe-node:hover { border-color: var(--accent); }
+  .pipe-node .num { position: absolute; top: -12px; left: 12px; width: 28px; height: 28px; background: var(--accent); color: #fff; border-radius: 50%; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .pipe-node .lbl { font-size: 10.5px; color: var(--accent); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 12px; }
+  .pipe-node .ttl { font-size: 14px; font-weight: 700; line-height: 1.25; }
+  .pipe-node .desc { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
+  .pipe-arrow { display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 18px; font-weight: 700; }
+
+  .stack { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
+  .tile { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; background: #fff; }
+  .tile .tag { font-size: 10.5px; color: var(--accent); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .tile .name { font-size: 14px; font-weight: 700; margin: 2px 0 4px; }
+  .tile .desc { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+  .tile code { background: var(--box); padding: 0 4px; border-radius: 3px; font-size: 11px; }
+
+  /* ─── Slide 2: panel ──────────────────────────────────────────────── */
+  .two-col { display: grid; grid-template-columns: 5fr 4fr; gap: 22px; flex: 1; min-height: 0; }
+  .panel-list { background: var(--box); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+  .panel-list h3 { margin: 0 0 10px; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
+  .panel-list .row { display: grid; grid-template-columns: 1fr 0.5fr 0.7fr 1.4fr 1.6fr; font-size: 12.5px; padding: 4px 0; border-bottom: 1px dotted var(--line); line-height: 1.4; }
+  .panel-list .row.head { font-weight: 700; color: var(--muted); font-size: 11px; letter-spacing: 0.04em; }
+  .panel-list .row div { padding-right: 6px; }
+
+  .methods h3 { margin: 0 0 8px; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
+  .themes { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 16px; }
+  .chip { font-size: 12px; background: var(--accent-soft); color: var(--accent); padding: 3px 10px; border-radius: 12px; font-weight: 500; }
+  .principle { background: var(--box); border-left: 3px solid var(--accent); padding: 10px 14px; font-size: 12.5px; line-height: 1.5; margin-top: 12px; }
+
+  /* ─── Slide 3: simulation target ──────────────────────────────────── */
+  .grid-sim { display: grid; grid-template-columns: 1.2fr 1fr; gap: 22px; flex: 1; min-height: 0; }
+  .card { background: var(--box); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+  .card h3 { margin: 0 0 6px; font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
+  .card .show-title { font-size: 19px; font-weight: 700; margin-bottom: 2px; }
+  .card .show-sub { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .card ul { margin: 0; padding-left: 16px; font-size: 12.5px; line-height: 1.55; }
+  .card li { margin-bottom: 3px; }
+  .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .metric { border: 1px solid var(--line); border-radius: 6px; padding: 11px 13px; }
+  .metric .mname { font-size: 11.5px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1px; }
+  .metric .mformula { font-size: 12.5px; font-weight: 600; margin-top: 2px; font-family: ui-monospace, monospace; }
+  .metric .mdesc { font-size: 11px; color: var(--muted); line-height: 1.4; margin-top: 2px; }
+  .why { font-size: 11.5px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+
+  /* ─── Slide 4: production pipeline (horizontal) ───────────────────── */
+  .row-label { display: flex; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 700; margin: 4px 0 -2px; }
+  .row-label .dim { color: var(--muted); font-weight: 500; font-size: 11.5px; }
+  .row-label .now-tag { background: var(--warn-soft); color: var(--warn); font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+  .row-label .prod-tag { background: var(--good-soft); color: var(--good); font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+  .prod-flow { display: grid; grid-template-columns: 1fr 14px 1fr 14px 1fr 14px 1fr 14px 1fr 14px 1fr; gap: 2px; align-items: stretch; }
+  .prod-node { background: #fff; border: 1.5px solid var(--line); border-radius: 7px; padding: 10px 10px; position: relative; display: flex; flex-direction: column; gap: 3px; min-height: 100px; }
+  .prod-node.no-llm { background: var(--box); border-color: var(--line); }
+  .prod-node.llm { background: var(--accent-soft); border-color: var(--accent); }
+  .prod-node.missing { background: #fff; border: 1.5px dashed #cbd5e1; }
+  .prod-node .num { position: absolute; top: -11px; left: 10px; width: 24px; height: 24px; background: var(--fg); color: #fff; border-radius: 50%; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .prod-node.llm .num { background: var(--accent); }
+  .prod-node.missing .num { background: #cbd5e1; color: #64748b; }
+  .prod-node .ttl { font-size: 12.5px; font-weight: 700; margin-top: 10px; line-height: 1.25; }
+  .prod-node .desc { font-size: 10.5px; color: var(--muted); line-height: 1.4; }
+  .prod-node.missing .ttl, .prod-node.missing .desc { color: #94a3b8; }
+  .prod-node .pill { font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 1px 5px; border-radius: 7px; align-self: flex-start; margin-top: auto; }
+  .prod-node.no-llm .pill { background: #e2e8f0; color: #475569; }
+  .prod-node.llm .pill { background: var(--accent); color: #fff; }
+  .prod-node.missing .pill { background: #f1f5f9; color: #94a3b8; border: 1px dashed #cbd5e1; }
+  .prod-arrow { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; font-weight: 700; }
+
+  /* ─── Simulation mechanics slide ─────────────────────────────────── */
+  .sim-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; flex: 1; min-height: 0; }
+  .sim-stack { display: flex; flex-direction: column; gap: 6px; }
+  .sim-stage { background: #fff; border: 1.5px solid var(--line); border-radius: 8px; padding: 10px 14px; position: relative; }
+  .sim-stage.input { background: var(--box); }
+  .sim-stage.loop { background: #fff; border-color: var(--accent); border-width: 1.5px; }
+  .sim-stage.output { background: var(--box); }
+  .sim-stage h4 { margin: 0 0 4px; font-size: 13px; font-weight: 700; }
+  .sim-stage .sub { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+  .sim-stage .sub code { background: var(--box); padding: 0 4px; border-radius: 3px; font-size: 11px; }
+  .sim-arrow-v { text-align: center; color: var(--accent); font-size: 14px; line-height: 1; }
+  .loop-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+  .platform-card { background: var(--box); border: 1px solid var(--line); border-radius: 5px; padding: 7px 10px; font-size: 11px; line-height: 1.4; }
+  .platform-card strong { font-size: 11.5px; color: var(--accent); display: block; margin-bottom: 1px; }
+  .loop-feedback { font-size: 11px; color: var(--accent); text-align: center; margin-top: 6px; font-weight: 600; }
+  .loop-rounds-tag { position: absolute; top: -10px; right: 12px; background: var(--accent); color: #fff; font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+
+  .scope-stack { display: flex; flex-direction: column; gap: 12px; }
+  .scope-panel { border-radius: 7px; padding: 12px 14px; }
+  .scope-panel.captures { background: var(--good-soft); border: 1px solid #86efac; }
+  .scope-panel.limits { background: var(--warn-soft); border: 1px solid #fcd34d; }
+  .scope-panel h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+  .scope-panel.captures h4 { color: var(--good); }
+  .scope-panel.limits h4 { color: var(--warn); }
+  .scope-panel ul { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.55; color: var(--fg); }
+  .scope-panel li { margin-bottom: 3px; }
+
+  /* ─── Slide 6: simulation result ─────────────────────────────────── */
+  .metric-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .big-metric { background: #fff; border: 1.5px solid var(--line); border-radius: 8px; padding: 14px 16px; position: relative; }
+  .big-metric.headline { background: var(--accent-soft); border-color: var(--accent); }
+  .big-metric .big-num { font-size: 30px; font-weight: 800; line-height: 1; color: var(--accent); letter-spacing: -0.02em; }
+  .big-metric .big-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 6px; font-weight: 700; }
+  .big-metric .big-desc { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+  .big-metric .badge { position: absolute; top: 10px; right: 10px; font-size: 9.5px; padding: 2px 6px; border-radius: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+  .big-metric .badge.good { background: var(--good-soft); color: var(--good); }
+  .big-metric .badge.warn { background: var(--warn-soft); color: var(--warn); }
+
+  .result-grid { display: grid; grid-template-columns: 1.7fr 1fr; gap: 18px; flex: 1; min-height: 0; margin-top: 4px; }
+  .panel-results h3, .findings h3 { margin: 0 0 8px; font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
+  .result-row { display: grid; grid-template-columns: 90px 50px 1fr 70px; gap: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 5px; margin-bottom: 5px; cursor: pointer; align-items: center; font-size: 12px; background: #fff; transition: background 120ms; }
+  .result-row:hover { background: var(--box); border-color: var(--accent); }
+  .result-row.fp { background: var(--warn-soft); border-color: var(--warn); }
+  .result-row .rname { font-weight: 700; }
+  .result-row .rscore { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .result-row .rthemes { color: var(--muted); font-size: 11.5px; }
+  .result-row .rflag { font-size: 10.5px; text-align: right; font-weight: 700; }
+  .result-row .rflag.unclear { color: var(--warn); }
+  .result-row .rflag.clear { color: var(--good); }
+  .result-row .rflag.fp-note { color: var(--warn); font-size: 9.5px; }
+  .result-row .toggle-arrow { display: none; }
+  .quote { font-size: 11.5px; color: var(--fg); background: var(--box); border-left: 3px solid var(--accent); padding: 8px 12px; margin: -4px 0 6px 14px; line-height: 1.5; max-height: 0; overflow: hidden; opacity: 0; transition: max-height 200ms ease, opacity 200ms ease, padding 200ms ease, margin 200ms ease; padding-top: 0; padding-bottom: 0; border-left-width: 0; }
+  .quote.show { max-height: 100px; opacity: 1; padding: 8px 12px; margin: -2px 0 6px 14px; border-left-width: 3px; }
+  .quote em { color: var(--muted); font-style: normal; font-size: 10.5px; display: block; margin-top: 2px; }
+
+  .findings { background: var(--box); border-radius: 6px; padding: 12px 14px; border: 1px solid var(--line); }
+  .findings ul { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.55; }
+  .findings li { margin-bottom: 6px; }
+  .findings li strong { color: var(--accent); }
+  .findings li .fp-tag { background: var(--warn-soft); color: var(--warn); font-size: 9.5px; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-left: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* ─── Slide 5: comparison table ──────────────────────────────────── */
+  .cmp-table { width: 100%; border-collapse: collapse; font-size: 12.5px; flex: 1; }
+  .cmp-table th, .cmp-table td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; line-height: 1.45; }
+  .cmp-table thead th { background: var(--box); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+  .cmp-table tbody td:first-child { font-weight: 700; color: var(--fg); white-space: nowrap; background: var(--box); }
+  .cmp-table .now { color: #b45309; }
+  .cmp-table .prod { color: var(--good); }
+  .cmp-table .rel { font-size: 12px; }
+  .cmp-table .rel .swap { display: flex; align-items: baseline; gap: 6px; }
+  .cmp-table .rel .from { color: var(--warn); }
+  .cmp-table .rel .arrow { color: var(--muted); }
+  .cmp-table .rel .to { color: var(--good); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- ─────────────────────────── SLIDE 0 (EXEC BRIEF) ─────────────────────────── -->
+  <section class="slide active" id="s0">
+    <header>
+      <h1>Executive Brief</h1>
+      <div class="subtitle">A POC exploring AI-generated audience insights — virtual panels, synthetic audiences, digital-twin viewers</div>
+    </header>
+    <div class="body">
+
+      <div class="exec-summary">
+        <strong>The exercise.</strong> Can AI generate useful audience-response metrics and qualitative insight without running a live panel? The category goes by several names — <em>virtual panel</em>, <em>synthetic audience</em>, <em>digital-twin viewer</em> — and is still forming. This proof-of-concept tests the idea on UK media content using <strong style="color: var(--fg);">MiroFish</strong>, an open-source engine that turns a structured audience description into persona-driven AI agents and a simulated audience response.
+      </div>
+
+      <div class="exec-grid">
+        <div class="card">
+          <h3>What we wanted to know</h3>
+          <ul>
+            <li>Can a small simulated panel produce <strong>directionally useful</strong> reach, engagement, appreciation, and clarity signals?</li>
+            <li>Can it surface <strong>marketable insights and risks</strong> pre-launch — the qualitative colour real panels deliver weeks later?</li>
+            <li>Where does it work, and where does it fail loudly enough to matter?</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Sample evaluation</h3>
+          <ul>
+            <li>6-panelist UK seed vs <em>BBC One Sherwood</em> Series 2 (25 Aug 2024)</li>
+            <li>Reach <strong>6/6</strong> · Engagement <strong>5/6</strong> · Appreciation <strong>83</strong> (good band) · Clarity flag <strong>3/6</strong></li>
+            <li>Directionally aligned with Series 1 reception</li>
+            <li>Surfaced an actionable promo idea and a political-tone risk</li>
+            <li>Every metric audits back to a per-panelist quote</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Production opportunities</h3>
+          <ul>
+            <li><strong>Pre-launch read</strong> on creative, casting, scheduling, regional fit</li>
+            <li><strong>Risk rehearsal</strong> for polarising content before public exposure</li>
+            <li><strong>Synthetic qualitative</strong> alongside quantitative measurement</li>
+            <li><strong>Narrative layer</strong> over BARB / comScore / NIQ data</li>
+            <li>Once calibrated to historical outcomes — a cheap directional companion to the measurement stack</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footnote">
+        <strong>Status.</strong> POC complete on a single illustrative show. The output is useful as pre-launch hypothesis and qualitative colour, not yet as calibrated measurement. Production positioning depends on grounding the seed in real panel + media data and closing the validation loop — covered in the slides ahead.
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── SLIDE 1 ─────────────────────────── -->
+  <section class="slide" id="s1">
+    <header>
+      <h1>MiroFish Pipeline</h1>
+      <div class="subtitle">Five steps from a structured seed to a synthesised audience prediction</div>
+    </header>
+    <div class="body">
+
+      <div class="pipe-flow">
+        <div class="pipe-node">
+          <div class="num">1</div>
+          <div class="lbl">Seed</div>
+          <div class="ttl">Two-file input</div>
+          <div class="desc">Identity table + study context. Participants declared explicitly.</div>
+        </div>
+        <div class="pipe-arrow">▶</div>
+        <div class="pipe-node">
+          <div class="num">2</div>
+          <div class="lbl">Ontology</div>
+          <div class="ttl">Type schema</div>
+          <div class="desc">10 entity types. Each description with positive + anti-examples to guide downstream typing.</div>
+        </div>
+        <div class="pipe-arrow">▶</div>
+        <div class="pipe-node">
+          <div class="num">3</div>
+          <div class="lbl">Graph</div>
+          <div class="ttl">Graphiti + Neo4j</div>
+          <div class="desc">Self-hosted temporal knowledge graph. Seed chunked, entities + relations extracted.</div>
+        </div>
+        <div class="pipe-arrow">▶</div>
+        <div class="pipe-node">
+          <div class="num">4</div>
+          <div class="lbl">Profiles</div>
+          <div class="ttl">Filtered persona gen</div>
+          <div class="desc">Ontology-aware filter keeps human-typed nodes. LLM writes one persona per agent.</div>
+        </div>
+        <div class="pipe-arrow">▶</div>
+        <div class="pipe-node">
+          <div class="num">5</div>
+          <div class="lbl">Sim + Report</div>
+          <div class="ttl">OASIS → metrics</div>
+          <div class="desc">Multi-round agents on Reddit + Twitter sims. ReportAgent synthesises predictions.</div>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="tile">
+          <div class="tag">Knowledge graph</div>
+          <div class="name">Graphiti + Neo4j (self-hosted)</div>
+          <div class="desc">Drop-in <code>zep_compat</code> adapter exposes a Zep-shaped sync API over async Graphiti. No quotas.</div>
+        </div>
+        <div class="tile">
+          <div class="tag">Simulation engine</div>
+          <div class="name">CAMEL-AI OASIS</div>
+          <div class="desc">Reddit- and Twitter-style platforms in parallel. Per-agent activity config (stance, sentiment, posting rate) generated from the graph.</div>
+        </div>
+        <div class="tile">
+          <div class="tag">LLM backbone</div>
+          <div class="name">OpenAI gpt-4o-mini</div>
+          <div class="desc">Powers ontology, persona, agent runtime, report. OpenAI-SDK compatible — provider swappable per stage.</div>
+        </div>
+      </div>
+
+      <div class="footnote">
+        <strong>Recent improvements:</strong> Zep Cloud → Graphiti+Neo4j (no quotas) · ontology types now demand anti-examples in every description · ontology-aware agent filter adapts to per-study type names · live <code>/version</code> endpoint for deploy-vs-main verification. Deployed on Railway, two services, single public URL.
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── SLIDE 2 ─────────────────────────── -->
+  <section class="slide" id="s2">
+    <header>
+      <h1>The Seed: A BBC One Viewing Panel</h1>
+      <div class="subtitle">Sunday 18 August 2024 · BARB-style panel · 6 UK viewers (lite cohort for fast iteration)</div>
+    </header>
+    <div class="body">
+      <div class="two-col">
+
+        <div class="panel-list">
+          <h3>The 6 panelists</h3>
+          <div class="row head"><div>Name · Age</div><div>Gender</div><div>Region</div><div>Life</div><div>TV register</div></div>
+          <div class="row"><div>Margaret · 72</div><div>F</div><div>SW England</div><div>Retired admin, widowed</div><div>Live-TV loyalist · direct</div></div>
+          <div class="row"><div>Raj · 34</div><div>M</div><div>London</div><div>Fintech PM, new father</div><div>Catch-up first · terse</div></div>
+          <div class="row"><div>Chioma · 45</div><div>F</div><div>Manchester</div><div>Outreach coord, mum of two</div><div>Values representation</div></div>
+          <div class="row"><div>Tom · 23</div><div>M</div><div>Croydon</div><div>Social-media content</div><div>Streamer · barely live</div></div>
+          <div class="row"><div>Amy · 19</div><div>F</div><div>London</div><div>History undergrad</div><div>Streams everything</div></div>
+          <div class="row"><div>Klaus · 61</div><div>M</div><div>Bristol</div><div>Retired engineer, Austrian</div><div>Thoughtful · public-service fan</div></div>
+        </div>
+
+        <div class="methods">
+          <h3>Six BBC appreciation themes</h3>
+          <div class="themes">
+            <span class="chip">informative</span>
+            <span class="chip">reflected UK life</span>
+            <span class="chip">representative</span>
+            <span class="chip">culturally significant</span>
+            <span class="chip">thought-provoking</span>
+            <span class="chip">emotionally engaging</span>
+          </div>
+
+          <h3>Each persona carries</h3>
+          <ul style="margin:0; padding-left:16px; font-size:12.5px; line-height:1.55; color:var(--fg);">
+            <li>Demographic + occupation + household</li>
+            <li>Relationship with TV (live vs streaming)</li>
+            <li>Voice register (direct, sceptical, warm, terse)</li>
+            <li>18 August viewing pattern: rater style, themes valued, scoring range</li>
+          </ul>
+
+          <div class="principle">
+            <strong>Design principle:</strong> the seed holds 6 <em>people</em>, not 6 demographic rows. Only the panelists are simulation participants — programmes, themes, and ratings are context, never voices.
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── SLIDE 3 ─────────────────────────── -->
+  <section class="slide" id="s3">
+    <header>
+      <h1>The Simulation Target</h1>
+      <div class="subtitle">A real BBC One Sunday drama — predictable against actual BARB outcomes</div>
+    </header>
+    <div class="body">
+      <div class="grid-sim">
+
+        <div class="card">
+          <h3>The target</h3>
+          <div class="show-title">Sherwood — Series 2</div>
+          <div class="show-sub">BBC One · Sunday 25 August 2024, 21:00 · 6 episodes · real launch</div>
+          <ul>
+            <li><strong>Writer:</strong> James Graham</li>
+            <li><strong>Cast:</strong> Morrissey, Manville, Dolan, Lindsay, Dillane — ensemble, no household-name lead</li>
+            <li><strong>Setting:</strong> Ex-mining Nottinghamshire, post-1984 Miners' Strike shadow</li>
+            <li><strong>Tone:</strong> Slow-burn political thriller, demanding, emotionally weighty</li>
+            <li><strong>Reception:</strong> Critically strong · skewed older audience</li>
+          </ul>
+          <div class="why">
+            Chosen because it's real (predictions checkable against BARB), ensemble (no celebrity anchor for the LLM to lean on), and polarising on political, regional, and pacing axes — the same axes the panel varies along.
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Four headline metrics</h3>
+          <div class="metrics">
+            <div class="metric">
+              <div class="mname">Reach</div>
+              <div class="mformula">X / 6</div>
+              <div class="mdesc">Panelists who watch any of episode 1</div>
+            </div>
+            <div class="metric">
+              <div class="mname">Engagement</div>
+              <div class="mformula">Y / 6</div>
+              <div class="mdesc">Panelists who watch &gt; half</div>
+            </div>
+            <div class="metric">
+              <div class="mname">Appreciation Index</div>
+              <div class="mformula">0 – 100</div>
+              <div class="mdesc">Mean score over watchers · 85+ excellent · 75-84 good · &lt;65 weak</div>
+            </div>
+            <div class="metric">
+              <div class="mname">Clarity Risk</div>
+              <div class="mformula">Z / 6</div>
+              <div class="mdesc">Panelists flagging the message as unclear</div>
+            </div>
+          </div>
+          <div class="why" style="margin-top:10px;">
+            Each metric traces back to panelist-level rows. Strict raters stay strict, generous stay generous.  Every prediction auditable against a panelist's 18 August behaviour.
+          </div>
+        </div>
+
+      </div>
+
+      <div class="footnote">
+        <strong>The calibration question:</strong> can a 6-persona simulation built from 18 August viewing patterns predict Sherwood S2's actual audience response — Reach, Engagement, AI, Clarity — closely enough to be useful pre-launch? Output is fractions of the simulated cohort, not population projections. <em>Real Sherwood S2 numbers exist — the simulation can be checked.</em>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────── SLIDE: How the Simulation Works ─────────────────────── -->
+  <section class="slide" id="s-sim">
+    <header>
+      <h1>How the Simulation Works</h1>
+      <div class="subtitle">OASIS multi-round agents on two parallel simulated platforms — and what that does and doesn't tell us</div>
+    </header>
+    <div class="body">
+      <div class="sim-grid">
+
+        <!-- Left: mechanics block diagram -->
+        <div class="sim-stack">
+
+          <div class="sim-stage input">
+            <h4>1 · Agents loaded</h4>
+            <div class="sub">6 panelist personas + activity config (stance, sentiment bias, posting rate, active hours) generated from the knowledge graph.</div>
+          </div>
+          <div class="sim-arrow-v">▼</div>
+
+          <div class="sim-stage loop">
+            <span class="loop-rounds-tag">×N rounds (default 3)</span>
+            <h4>2 · Per-round simulation loop</h4>
+            <div class="sub">Each round, every agent reads the current feed, picks one action, and writes back. Both platforms run in parallel — agents on each see only that platform.</div>
+            <div class="loop-inner">
+              <div class="platform-card">
+                <strong>Reddit-style</strong>
+                Post · comment · like · dislike · follow · search · refresh
+              </div>
+              <div class="platform-card">
+                <strong>Twitter-style</strong>
+                Post · repost · quote · like · follow
+              </div>
+            </div>
+            <div class="loop-feedback">↻ Each round's posts feed the next round's reading</div>
+          </div>
+          <div class="sim-arrow-v">▼</div>
+
+          <div class="sim-stage output">
+            <h4>3 · ReportAgent aggregates</h4>
+            <div class="sub">After N rounds, the ReportAgent reads the post log + graph, computes the four headline metrics, and synthesises the narrative report.</div>
+          </div>
+
+        </div>
+
+        <!-- Right: what it captures vs limitations -->
+        <div class="scope-stack">
+
+          <div class="scope-panel captures">
+            <h4>What the simulation captures</h4>
+            <ul>
+              <li>Vocal social-media discourse — what panelists would <em>say</em></li>
+              <li>Persona-driven reactions across ages, regions, ethnicities</li>
+              <li>Narrative emergence — which themes spread, which divide</li>
+              <li>Risk surfacing — what could backfire pre-launch (cheap)</li>
+              <li>Synthetic qualitative interviews on demand</li>
+            </ul>
+          </div>
+
+          <div class="scope-panel limits">
+            <h4>Limitations of this approach</h4>
+            <ul>
+              <li>The silent majority — only ~5–10% of any audience posts publicly</li>
+              <li>Actual viewing behaviour — did they tune in? Watch through? Drop off?</li>
+              <li>Purchase actions — did the campaign move sales?</li>
+              <li>No calibration — predictions have no error bars without ground truth</li>
+              <li>Reddit-shape ≠ population-shape — captures vocal discourse, not the market</li>
+            </ul>
+          </div>
+
+        </div>
+
+      </div>
+
+      <div class="footnote">
+        Reddit/Twitter dynamics ≠ consumer behaviour. The simulation models <strong>what people would say if they posted</strong>, not <strong>what people would do</strong>. Useful for hypothesis generation and creative pre-flight; not a replacement for measured outcomes. The next two slides show how this changes when real panel + media + purchase data closes the loop.
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── SLIDE 4 ─────────────────────────── -->
+  <section class="slide" id="s4">
+    <header>
+      <h1>From Simulation to Production</h1>
+      <div class="subtitle">A calibrated pipeline grounded in real data — LLM as commentator, not predictor</div>
+    </header>
+    <div class="body">
+
+      <div class="row-label">
+        MiroFish today <span class="now-tag">sandbox</span>
+        <span class="dim">— LLM-heavy at almost every stage; no validation loop</span>
+      </div>
+      <div class="prod-flow">
+        <div class="prod-node no-llm">
+          <div class="num">1</div>
+          <div class="ttl">Seed</div>
+          <div class="desc">Hand-written markdown — identity table + study context. Two files, no joins.</div>
+          <span class="pill">no LLM</span>
+        </div>
+        <div class="prod-arrow">▶</div>
+        <div class="prod-node llm">
+          <div class="num">2</div>
+          <div class="ttl">Ontology</div>
+          <div class="desc">LLM drafts ~10 entity types with positive + anti-examples. Non-deterministic.</div>
+          <span class="pill">LLM</span>
+        </div>
+        <div class="prod-arrow">▶</div>
+        <div class="prod-node llm">
+          <div class="num">3</div>
+          <div class="ttl">Graph</div>
+          <div class="desc">Graphiti chunks the seed and LLM-extracts entities + relations into Neo4j.</div>
+          <span class="pill">LLM</span>
+        </div>
+        <div class="prod-arrow">▶</div>
+        <div class="prod-node llm">
+          <div class="num">4</div>
+          <div class="ttl">Profiles</div>
+          <div class="desc">Filter keeps human-typed nodes. LLM writes one persona + activity config per agent.</div>
+          <span class="pill">LLM</span>
+        </div>
+        <div class="prod-arrow">▶</div>
+        <div class="prod-node llm">
+          <div class="num">5</div>
+          <div class="ttl">Sim + Report</div>
+          <div class="desc">OASIS LLM agents post on simulated Reddit/Twitter. ReportAgent narrates outcomes.</div>
+          <span class="pill">LLM</span>
+        </div>
+        <div class="prod-arrow">▶</div>
+        <div class="prod-node missing">
+          <div class="num">6</div>
+          <div class="ttl">Validate</div>
+          <div class="desc">No ground truth wired in. Predictions cannot yet be scored against BARB or actuals.</div>
+          <span class="pill">missing</span>
+        </div>
+      </div>
+
+      <div class="row-label" style="margin-top: 14px;">
+        Production-grade <span class="prod-tag">calibrated</span>
+        <span class="dim">— LLM contained to one stage; validation loop closes 6 → 3</span>
+      </div>
+      <div class="prod-flow">
+        <div class="prod-node no-llm">
+          <div class="num">1</div>
+          <div class="ttl">Input</div>
+          <div class="desc">Real panel · media (BARB, comScore) · purchase (NIQ Connect) · campaign metadata</div>
+          <span class="pill">no LLM</span>
+        </div>
+        <div class="prod-arrow">▶</div>
+        <div class="prod-node no-llm">
+          <div class="num">2</div>
+          <div class="ttl">Prep</div>
+          <div class="desc">Identity resolution · feature engineering · time-aligned exposure logs</div>
+          <span class="pill">no LLM</span>
+        </div>
+        <div class="prod-arrow">▶</div>
+        <div class="prod-node no-llm">
+          <div class="num">3</div>
+          <div class="ttl">Models</div>
+          <div class="desc">Reach &amp; frequency · AI regression · brand-lift causal · MMM · MTA · drop-off</div>
+          <span class="pill">no LLM</span>
+        </div>
+        <div class="prod-arrow">▶</div>
+        <div class="prod-node llm">
+          <div class="num">4</div>
+          <div class="ttl">LLM thin layer</div>
+          <div class="desc">Synthetic interviews · hypothesis surfacing · report narrative. Reads from #3, never invents.</div>
+          <span class="pill">LLM only here</span>
+        </div>
+        <div class="prod-arrow">▶</div>
+        <div class="prod-node no-llm">
+          <div class="num">5</div>
+          <div class="ttl">Deliverables</div>
+          <div class="desc">Pre-launch brief · mid-flight report · post-flight closeout · ROAS · recommendations</div>
+          <span class="pill">narrative</span>
+        </div>
+        <div class="prod-arrow">▶</div>
+        <div class="prod-node no-llm">
+          <div class="num">6</div>
+          <div class="ttl">Validate</div>
+          <div class="desc">Capture predictions vs actuals · compute error · retrain models · publish accuracy</div>
+          <span class="pill">no LLM</span>
+        </div>
+      </div>
+
+      <div class="footnote">
+        <strong>The shift:</strong> today's pipeline is LLM at stages 2–5 with no validation — useful as a sandbox, not as a measurement instrument. The production version contains the LLM to stage 4 and closes the 6 → 3 retrain loop, inverting the LLM exposure ratio from ~80% to ~10–15% and making every prediction falsifiable.
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── SLIDE 5 ─────────────────────────── -->
+  <section class="slide" id="s5">
+    <header>
+      <h1>MiroFish Today vs Production-Grade</h1>
+      <div class="subtitle">What changes when input is real data and the validation loop is closed</div>
+    </header>
+    <div class="body">
+
+      <table class="cmp-table">
+        <thead>
+          <tr>
+            <th style="width: 16%;">Stage</th>
+            <th style="width: 28%;">MiroFish today (sandbox)</th>
+            <th style="width: 28%;">Production-grade</th>
+            <th style="width: 28%;">Reliability &amp; credibility</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Input</td>
+            <td class="now">Markdown seed, hand-written</td>
+            <td class="prod">Real panel + media + purchase data, joined at panellist level</td>
+            <td class="rel"><div class="swap"><span class="from">illustrative</span><span class="arrow">→</span><span class="to">empirical</span></div>Source can be cited; rows can be audited.</td>
+          </tr>
+          <tr>
+            <td>Profile build</td>
+            <td class="now">LLM extraction (Graphiti) — non-deterministic, mistypes possible</td>
+            <td class="prod">Database join — deterministic</td>
+            <td class="rel"><div class="swap"><span class="from">flaky</span><span class="arrow">→</span><span class="to">reproducible</span></div>Same input always gives same agents.</td>
+          </tr>
+          <tr>
+            <td>Prediction engine</td>
+            <td class="now">LLM agents posting on simulated Reddit / Twitter</td>
+            <td class="prod">Statistical models · MMM · MTA, calibrated on historical outcomes</td>
+            <td class="rel"><div class="swap"><span class="from">directional</span><span class="arrow">→</span><span class="to">quantified</span></div>Predictions ship with error bars.</td>
+          </tr>
+          <tr>
+            <td>Narrative</td>
+            <td class="now">LLM ReportAgent over simulated discourse</td>
+            <td class="prod">LLM ReportAgent over <em>measured</em> metrics — same component, real inputs</td>
+            <td class="rel"><div class="swap"><span class="from">colour</span><span class="arrow">→</span><span class="to">grounded</span></div>Every number cited, none invented.</td>
+          </tr>
+          <tr>
+            <td>Validation</td>
+            <td class="now">None — outputs cannot be falsified</td>
+            <td class="prod">Continuous — predicted vs actual captured, models retrained, accuracy published</td>
+            <td class="rel"><div class="swap"><span class="from">unfalsifiable</span><span class="arrow">→</span><span class="to">measurable</span></div>Wrongness becomes visible and fixable.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="footnote">
+        <strong>The takeaway isn't</strong> "now I have a working simulator." <strong>It's</strong> "I now know which problems LLMs solve cheaply (narrative, exploration) and which they don't (calibration, prediction with error bars)." MiroFish has earned its place as a sandbox for understanding pipeline shape and failure modes; the production version reuses parts of it (OASIS, ReportAgent) but re-architected around real data and a validation loop.
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── SLIDE 6 ─────────────────────────── -->
+  <section class="slide" id="s6">
+    <header>
+      <h1>Sherwood S2 — Predicted Audience Response</h1>
+      <div class="subtitle">Live simulation output · 6-panelist lite cohort · click any row for the panelist's voice</div>
+    </header>
+    <div class="body">
+
+      <div class="metric-tiles">
+        <div class="big-metric headline">
+          <div class="big-num">6/6</div>
+          <div class="big-label">Reach</div>
+          <div class="big-desc">All panelists watched some of episode 1</div>
+        </div>
+        <div class="big-metric">
+          <div class="big-num">5/6</div>
+          <div class="big-label">Engagement</div>
+          <div class="big-desc">Watched more than half</div>
+        </div>
+        <div class="big-metric">
+          <div class="big-num">83 <span class="badge good">good</span></div>
+          <div class="big-label">Appreciation Index</div>
+          <div class="big-desc">Above the 75–84 "good" band</div>
+        </div>
+        <div class="big-metric">
+          <div class="big-num">3/6 <span class="badge warn">flag</span></div>
+          <div class="big-label">Clarity Risk</div>
+          <div class="big-desc">Half flag the political messaging as unclear</div>
+        </div>
+      </div>
+
+      <div class="result-grid">
+
+        <div class="panel-results">
+          <h3>Per-panelist predictions</h3>
+
+          <div class="result-row" onclick="toggleQuote('q1')">
+            <span class="rname">Margaret</span>
+            <span class="rscore">88</span>
+            <span class="rthemes">Political depth · societal impact</span>
+            <span class="rflag clear">clear</span>
+          </div>
+          <div class="quote" id="q1">"I am looking forward to the launch of Sherwood Series 2 — the first season left a strong impression on me, and I hope to see deeper character development." <em>Margaret · 72 · SW England · live-TV loyalist</em></div>
+
+          <div class="result-row" onclick="toggleQuote('q2')">
+            <span class="rname">Raj</span>
+            <span class="rscore">79</span>
+            <span class="rthemes">Reflective content · political commentary</span>
+            <span class="rflag unclear">unclear</span>
+          </div>
+          <div class="quote" id="q2">"The political commentary is often what makes or breaks a series, especially in today's climate." <em>Raj · 34 · London · multicultural-Britain sensitive</em></div>
+
+          <div class="result-row" onclick="toggleQuote('q3')">
+            <span class="rname">Chioma</span>
+            <span class="rscore">85</span>
+            <span class="rthemes">Community · social justice</span>
+            <span class="rflag clear">clear</span>
+          </div>
+          <div class="quote" id="q3">"The deeper political themes in Sherwood S2 could provide fertile ground for discussion." <em>Chioma · 45 · Manchester · representation-attuned</em></div>
+
+          <div class="result-row" onclick="toggleQuote('q4')">
+            <span class="rname">Tom</span>
+            <span class="rscore">81</span>
+            <span class="rthemes">Youth engagement · complex themes</span>
+            <span class="rflag unclear">unclear</span>
+          </div>
+          <div class="quote" id="q4">"Sherwood S2 can attract more viewers through engaging promotional activities, like live discussions or social-media challenges." <em>Tom · 23 · Croydon · streamer, social-media content</em></div>
+
+          <div class="result-row" onclick="toggleQuote('q5')">
+            <span class="rname">Amy</span>
+            <span class="rscore">82</span>
+            <span class="rthemes">Historical context · youth appeal</span>
+            <span class="rflag clear">clear</span>
+          </div>
+          <div class="quote" id="q5">"The political and social backdrop will resonate with young audiences." <em>Amy · 19 · London undergrad · streams everything</em></div>
+
+          <div class="result-row" onclick="toggleQuote('q6')">
+            <span class="rname">Klaus</span>
+            <span class="rscore">76</span>
+            <span class="rthemes">Character dynamics · social reflection</span>
+            <span class="rflag unclear">unclear</span>
+          </div>
+          <div class="quote" id="q6">"If too polarising, deepening political themes could push some viewers away." <em>Klaus · 61 · Bristol · retired engineer, public-service fan</em></div>
+
+        </div>
+
+        <div class="findings">
+          <h3>Interesting findings</h3>
+          <ul>
+            <li><strong>Marketable insight (Tom):</strong> directly proposes interactive promo — live discussions, social-media challenges. Useful actionable signal for marketing.</li>
+            <li><strong>Risk flag (Klaus):</strong> warns the political tone could alienate "if too polarising." A specific creative-direction risk.</li>
+            <li><strong>AI of 83 is plausible:</strong> Sherwood S1 reportedly scored similarly per BARB. Directionally sensible.</li>
+            <li><strong>Clarity split:</strong> 3/6 flag unclear — Raj, Tom, Klaus. Demographic mix: not just young/old. Suggests pacing rather than age is the issue.</li>
+            <li>
+              <strong>False positives still leaking:</strong>
+              <span class="fp-tag">caveat</span>
+              The full report also contained quotes from "Laura Kuenssberg" and "Austrian" — agents the LLM mis-extracted as panelists. Quotes discarded. The structural fix is to declare the panel rather than extract it; pinning a name allowlist was considered and rejected as it papers over the underlying graph-extraction non-determinism.
+            </li>
+          </ul>
+        </div>
+
+      </div>
+
+      <div class="footnote">
+        <strong>Calibration check available:</strong> Sherwood S2 actually aired on 25 August 2024 — real BARB AI, reach, and review consensus exist. The next step is comparing this prediction against the real outcome to calibrate the simulator's reliability. Without that comparison, this output remains directional.
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="ctrl">
+  <button onclick="nav(-1)">◀</button>
+  <span id="counter">1 / 7</span>
+  <button onclick="nav(1)">▶</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  let i = 0;
+  function show(n) {
+    i = (n + slides.length) % slides.length;
+    slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
+    document.getElementById('counter').textContent = (i + 1) + ' / ' + slides.length;
+  }
+  function nav(d) { show(i + d); }
+  function toggleQuote(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('show');
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') nav(1);
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') nav(-1);
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(slides.length - 1);
+  });
+</script>
+</body>
+</html>
