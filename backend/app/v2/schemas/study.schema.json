@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mirofish.local/schemas/study.schema.json",
+  "title": "MiroFish Study",
+  "description": "Star-schema study definition. One identity CSV + N dimension CSVs keyed back to it. Loaded deterministically into Neo4j without an LLM.",
+  "type": "object",
+  "required": ["study_id", "identity", "brief"],
+  "additionalProperties": false,
+  "properties": {
+    "study_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+
+    "identity": {
+      "$ref": "#/$defs/identity_table"
+    },
+
+    "dimensions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dimension" },
+      "default": []
+    },
+
+    "brief": { "$ref": "#/$defs/brief" },
+
+    "engagement": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Defaults applied to the engagement model. Per-agent overrides may live as columns on the identity table.",
+      "properties": {
+        "salience_threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.35 },
+        "daily_action_cap":   { "type": "integer", "minimum": 1, "default": 6 },
+        "embedding_model":    { "type": "string", "default": "text-embedding-3-small" }
+      }
+    }
+  },
+
+  "$defs": {
+
+    "column": {
+      "type": "object",
+      "required": ["name", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "name":        { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "type":        { "enum": ["string", "int", "float", "bool", "string_list"] },
+        "description": { "type": "string" },
+        "required":    { "type": "boolean", "default": true },
+        "enum":        { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "identity_table": {
+      "type": "object",
+      "required": ["label", "key", "csv", "columns"],
+      "additionalProperties": false,
+      "description": "Canonical entity table. Each row produces exactly one Neo4j node with this label. Nothing else may produce a node with this label.",
+      "properties": {
+        "label":   { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$" },
+        "key":     { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "csv":     { "type": "string" },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/column" }
+        }
+      }
+    },
+
+    "dimension": {
+      "oneOf": [
+        { "$ref": "#/$defs/dimension_attribute" },
+        { "$ref": "#/$defs/dimension_edge" }
+      ]
+    },
+
+    "dimension_attribute": {
+      "type": "object",
+      "required": ["kind", "csv", "join_on", "columns"],
+      "additionalProperties": false,
+      "description": "Long-form attribute table. Rows merge as JSON object onto the identity node. Useful for sparse/optional fields.",
+      "properties": {
+        "kind":     { "const": "attribute" },
+        "name":     { "type": "string" },
+        "csv":      { "type": "string" },
+        "join_on":  { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "as":       { "type": "string", "description": "Property name on the identity node. Defaults to the dimension name." },
+        "columns":  { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/column" } }
+      }
+    },
+
+    "dimension_edge": {
+      "type": "object",
+      "required": ["kind", "csv", "join_on", "edge", "target", "columns"],
+      "additionalProperties": false,
+      "description": "Edge table. One row → one typed edge from identity node to a target node.",
+      "properties": {
+        "kind":     { "const": "edge" },
+        "name":     { "type": "string" },
+        "csv":      { "type": "string" },
+        "join_on":  { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "edge":     { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "target": {
+          "type": "object",
+          "required": ["label", "key"],
+          "additionalProperties": false,
+          "properties": {
+            "label":   { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$" },
+            "key":     { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+            "csv":     { "type": "string", "description": "Optional CSV defining target nodes. If omitted, target nodes are created from edge rows." },
+            "columns": { "type": "array", "items": { "$ref": "#/$defs/column" } }
+          }
+        },
+        "columns":  { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/column" } }
+      }
+    },
+
+    "brief": {
+      "type": "object",
+      "required": ["content_id", "title"],
+      "additionalProperties": false,
+      "description": "The simulation target — what we're predicting reactions to.",
+      "properties": {
+        "content_id":      { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "title":           { "type": "string" },
+        "genre":           { "type": "string" },
+        "slot":            { "type": "string" },
+        "channel":         { "type": "string" },
+        "runtime_minutes": { "type": "integer", "minimum": 1 },
+        "air_date":        { "type": "string", "format": "date" },
+        "synopsis":        { "type": "string" },
+        "rules":           { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+panelist_id,name,age,gender,region,occupation,household,voice_register,rater_bias,clarity_sensitivity,delayed_exposure_propensity,length_min_chars,length_max_chars,recorded_behaviour
+aisha,Aisha Hussain,19,F,Birmingham,Medical student (year 1),University halls,precise_focused,-0.05,medium,0.1,25,110,"First-year medical student in Birmingham university halls. Spent 18
+August 2024 revising; caught the headlines on Radio 4 in passing.
+Will not watch a 9pm Sunday drama in term time unless directly
+relevant to her course."
+jaden,Jaden Okafor,19,M,Croydon,Apprentice barber + TikTok creator,Family home,slangy_terse,-0.1,low,0.0,20,100,"Apprentice barber in Croydon who posts TikTok and Reels in the
+evenings. 18 August 2024 spent scrolling Reels and football clips;
+no live BBC viewing. Knows Sherwood by name only via a meme."
+nikhil,Nikhil Sharma,27,M,London,Junior solicitor,Shared flat,articulate_qualified,0.0,low,0.5,90,220,"Junior solicitor in London with long working hours. Catches prestige
+drama on iPlayer during the commute. On 18 August 2024 watched about
+half of the BBC One 21:00 drama on iPlayer the next day; AI 78.
+Likes James Graham's writing."
+sophie,Sophie Carter,31,F,Bristol,Marketing manager (on mat leave),Partner + 6-month baby,warm_distracted,-0.05,high,0.1,50,150,"Marketing manager on maternity leave with a 6-month-old. TV is a
+companion during feeds — light, familiar content. On 18 August 2024
+watched 10 minutes of the 21:00 drama before falling asleep; flagged
+it as ""too heavy for the time of night."""
+marcus,Marcus Bennett,38,M,Sheffield,Secondary-school history teacher,"Married, no children",thoughtful_referential,0.05,low,0.1,100,220,"Secondary-school history teacher in Sheffield. Classic BBC Two
+viewer; slow-burn political drama is his preferred form. On 18
+August 2024 watched the full BBC One 21:00 drama; AI 84; no clarity
+flags. Mentally noted points for class discussion."
+priya,Priya Iyer,42,F,Reading,NHS GP,"Husband + two children (10, 7)",measured_clinical,0.0,medium,0.1,80,180,"NHS GP, partner at a local practice in Reading. Watches with her
+husband, reads broadsheet reviews first. On 18 August 2024 started
+the BBC One 21:00 drama and switched off after 25 minutes — flagged
+the tone as ""too violent for the slot."""
+geoffrey,Geoffrey MacLeod,56,M,Edinburgh,Retired senior civil servant,Wife (working academic),precise_formal,0.05,low,0.05,120,240,"Retired senior civil servant in Edinburgh. Heavy BBC Two / BBC Four
+/ Radio 4 viewer; political documentaries are his core diet. On 18
+August 2024 watched four programmes in full including the 21:00
+drama; AI averaging 86; no clarity flags."
+rita,Rita Brennan,63,F,Liverpool,Retired hairdresser (ran own salon),Husband (retired joiner),warm_plain,-0.1,high,0.0,60,160,"Retired hairdresser in Liverpool. Soaps and panel shows; treats TV
+as relaxation. On 18 August 2024 started the 21:00 drama and
+switched to an old film after 20 minutes; flagged the drama as ""too
+dark and confusing — couldn't keep track of the names."""
+daniel,Daniel Kowalski,47,M,Manchester,Software engineer (fintech),Partner,dry_sceptical,-0.05,low,0.65,40,140,"Software engineer in Manchester. Streaming-only; broadcast TV
+avoided except for sport. Heard about Sherwood Series 2 via Reddit.
+Likely to catch the 21:00 drama on iPlayer in week two if reviewed
+well by people he trusts."
+margaret,Margaret Whitcombe,71,F,York,Retired primary-school teacher (widowed),Lives alone,warm_careful,0.0,high,0.0,80,180,"Retired primary-school teacher in York; widowed; lives alone.
+Live-TV loyalist; BBC One reliably at 21:00 on Sundays. On 18 August
+2024 watched the 21:00 drama in full; flagged it as unclear — ""too
+many character names introduced too quickly."""

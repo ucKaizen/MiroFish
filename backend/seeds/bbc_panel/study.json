@@ -1,0 +1,197 @@
+{
+  "study_id": "bbc_panel_sherwood_s2_2024",
+  "name": "BBC One Sunday Panel — Sherwood S2 prediction",
+  "description": "10 UK viewers; predict Sherwood S2 episode 1 launch on 2024-08-25.",
+  "identity": {
+    "label": "Panelist",
+    "key": "panelist_id",
+    "csv": "panelists.csv",
+    "columns": [
+      {
+        "name": "panelist_id",
+        "type": "string"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "age",
+        "type": "int"
+      },
+      {
+        "name": "gender",
+        "type": "string",
+        "enum": [
+          "F",
+          "M",
+          "X"
+        ]
+      },
+      {
+        "name": "region",
+        "type": "string"
+      },
+      {
+        "name": "occupation",
+        "type": "string"
+      },
+      {
+        "name": "household",
+        "type": "string"
+      },
+      {
+        "name": "voice_register",
+        "type": "string"
+      },
+      {
+        "name": "rater_bias",
+        "type": "float"
+      },
+      {
+        "name": "clarity_sensitivity",
+        "type": "string",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "name": "delayed_exposure_propensity",
+        "type": "float"
+      },
+      {
+        "name": "length_min_chars",
+        "type": "int"
+      },
+      {
+        "name": "length_max_chars",
+        "type": "int"
+      },
+      {
+        "name": "recorded_behaviour",
+        "type": "string"
+      }
+    ]
+  },
+  "dimensions": [
+    {
+      "kind": "edge",
+      "name": "genre_propensity",
+      "csv": "panelist_genre_propensity.csv",
+      "join_on": "panelist_id",
+      "edge": "PROPENSITY_FOR_GENRE",
+      "target": {
+        "label": "Genre",
+        "key": "genre"
+      },
+      "columns": [
+        {
+          "name": "panelist_id",
+          "type": "string"
+        },
+        {
+          "name": "genre",
+          "type": "string"
+        },
+        {
+          "name": "propensity",
+          "type": "float"
+        }
+      ]
+    },
+    {
+      "kind": "edge",
+      "name": "slot_propensity",
+      "csv": "panelist_slot_propensity.csv",
+      "join_on": "panelist_id",
+      "edge": "PROPENSITY_FOR_SLOT",
+      "target": {
+        "label": "Slot",
+        "key": "slot"
+      },
+      "columns": [
+        {
+          "name": "panelist_id",
+          "type": "string"
+        },
+        {
+          "name": "slot",
+          "type": "string"
+        },
+        {
+          "name": "propensity",
+          "type": "float"
+        }
+      ]
+    },
+    {
+      "kind": "attribute",
+      "name": "voice_examples",
+      "as": "voice_examples",
+      "csv": "panelist_voice_examples.csv",
+      "join_on": "panelist_id",
+      "columns": [
+        {
+          "name": "panelist_id",
+          "type": "string"
+        },
+        {
+          "name": "idx",
+          "type": "int"
+        },
+        {
+          "name": "example",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "kind": "attribute",
+      "name": "vocabulary",
+      "as": "vocabulary",
+      "csv": "panelist_vocabulary.csv",
+      "join_on": "panelist_id",
+      "columns": [
+        {
+          "name": "panelist_id",
+          "type": "string"
+        },
+        {
+          "name": "polarity",
+          "type": "string",
+          "enum": [
+            "required",
+            "forbidden"
+          ]
+        },
+        {
+          "name": "term",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "brief": {
+    "content_id": "sherwood_s2_e1_2024-08-25",
+    "title": "Sherwood Series 2, Episode 1",
+    "genre": "political_drama",
+    "slot": "sunday_2100_bbc1",
+    "channel": "BBC One",
+    "runtime_minutes": 60,
+    "air_date": "2024-08-25",
+    "synopsis": "Second run of James Graham's BBC One drama. Six episodes, around 60\nminutes each, broadcast Sunday evenings on BBC One (and iPlayer in\nfull from launch night). Set in present-day ex-mining\nNottinghamshire, in the long shadow of the 1984-85 Miners' Strike —\na community where political loyalty, family allegiance, and economic\nloss are still entangled. Series 2 picks up later in the same place:\norganised crime, generational fracture, and local power running in\nparallel and converging by the finale. Cast led by David Morrissey,\nLesley Manville, Monica Dolan, Robert Lindsay, and Stephen Dillane —\nensemble structure, no single protagonist. Tone: slow-burn,\npolitically engaged, demanding viewing.",
+    "rules": [
+      "Strict raters stay strict, generous raters stay generous.",
+      "Every prediction must be traceable to the panelist's recorded behaviour in the seed.",
+      "The 10 named panelists are the only participants — do not produce predictions for anyone else.",
+      "Do not invent facts or programmes."
+    ]
+  },
+  "engagement": {
+    "salience_threshold": 0.35,
+    "daily_action_cap": 6,
+    "embedding_model": "text-embedding-3-small"
+  }
+}
