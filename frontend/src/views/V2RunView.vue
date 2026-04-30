@@ -86,16 +86,35 @@
       </div>
     </section>
 
+    <section v-if="graphData" class="card">
+      <h2>4. Graph</h2>
+      <p class="muted">
+        Typed graph that the v2 loader wrote into Neo4j for this study.
+        {{ graphData.node_count }} nodes, {{ graphData.edge_count }} edges. Hover a
+        node for details. Drag to reposition.
+      </p>
+      <div class="graph-legend">
+        <span class="legend-pill" data-lbl="Panelist">Panelist</span>
+        <span class="legend-pill" data-lbl="Genre">Genre</span>
+        <span class="legend-pill" data-lbl="Slot">Slot</span>
+        <span class="legend-pill" data-lbl="Brief">Brief</span>
+      </div>
+      <svg ref="graphSvg" class="graph-svg" :width="graphWidth" :height="graphHeight"></svg>
+      <p v-if="graphError" class="error">{{ graphError }}</p>
+    </section>
+
     <section v-if="reportMarkdown" class="card">
-      <h2>4. Report</h2>
+      <h2>5. Report</h2>
       <pre class="report">{{ reportMarkdown }}</pre>
     </section>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import * as d3 from 'd3'
 import {
+  getGraph,
   getRun,
   getRunLog,
   getRunReportMarkdown,
@@ -116,7 +135,13 @@ const runError = ref('')
 
 const activeRun = ref(null)
 const reportMarkdown = ref('')
+const graphData = ref(null)
+const graphError = ref('')
+const graphSvg = ref(null)
+const graphWidth = 880
+const graphHeight = 520
 let pollHandle = null
+let simulation = null
 
 const logText = computed(() => (activeRun.value?.log || []).join('\n'))
 
@@ -186,6 +211,7 @@ async function pollUntilDone() {
         running.value = false
         const md = await getRunReportMarkdown(id)
         reportMarkdown.value = md
+        await loadAndRenderGraph(activeRun.value.study_id)
       } else if (activeRun.value.status === 'failed') {
         clearInterval(pollHandle)
         pollHandle = null
@@ -198,9 +224,129 @@ async function pollUntilDone() {
   }, 2000)
 }
 
+async function loadAndRenderGraph(study_id) {
+  graphError.value = ''
+  graphData.value = null
+  if (skipNeo4j.value) {
+    // Run was started with skip-Neo4j; nothing was written.
+    return
+  }
+  try {
+    const graph_id = `v2_${study_id}`
+    const res = await getGraph(graph_id)
+    graphData.value = res.data
+    await nextTick()
+    renderGraph(res.data)
+  } catch (err) {
+    graphError.value =
+      'Could not load graph from Neo4j. ' +
+      'On Railway, this happens when the graphdb service is offline. ' +
+      'The run, metrics, and report above are unaffected.'
+  }
+}
+
+function renderGraph(data) {
+  if (simulation) simulation.stop()
+  const svg = d3.select(graphSvg.value)
+  svg.selectAll('*').remove()
+
+  const width = graphWidth
+  const height = graphHeight
+
+  // Pre-scale propensity edges so that strong propensities pull harder.
+  const links = data.edges.map(e => ({
+    source: e.source,
+    target: e.target,
+    type: e.type,
+    propensity: e.props && e.props.propensity ? e.props.propensity : 0.5
+  }))
+  const nodes = data.nodes.map(n => ({
+    id: n.id,
+    label: n.label,
+    key: n.key,
+    name: (n.props && (n.props.name || n.props.title)) || n.key,
+    age: n.props && n.props.age,
+    region: n.props && n.props.region,
+    occupation: n.props && n.props.occupation
+  }))
+
+  const labelColor = {
+    Panelist: '#2563eb',
+    Genre:    '#65a30d',
+    Slot:     '#b45309',
+    Brief:    '#be185d'
+  }
+  const labelRadius = {
+    Panelist: 12,
+    Genre:    9,
+    Slot:     9,
+    Brief:    14
+  }
+
+  simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id)
+      .distance(d => 60 + (1 - (d.propensity || 0.5)) * 80)
+      .strength(d => 0.2 + (d.propensity || 0.5) * 0.6))
+    .force('charge', d3.forceManyBody().strength(-220))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collide', d3.forceCollide().radius(d => (labelRadius[d.label] || 10) + 4))
+
+  const link = svg.append('g')
+    .attr('stroke', '#cbd5e1')
+    .selectAll('line')
+    .data(links)
+    .enter().append('line')
+    .attr('stroke-width', d => 0.5 + (d.propensity || 0.5) * 2.5)
+    .attr('stroke-opacity', d => 0.25 + (d.propensity || 0.5) * 0.55)
+
+  const node = svg.append('g')
+    .selectAll('g')
+    .data(nodes)
+    .enter().append('g')
+    .call(d3.drag()
+      .on('start', (event, d) => {
+        if (!event.active) simulation.alphaTarget(0.3).restart()
+        d.fx = d.x; d.fy = d.y
+      })
+      .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y })
+      .on('end', (event, d) => {
+        if (!event.active) simulation.alphaTarget(0)
+        d.fx = null; d.fy = null
+      }))
+
+  node.append('circle')
+    .attr('r', d => labelRadius[d.label] || 8)
+    .attr('fill', d => labelColor[d.label] || '#6b7280')
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 1.5)
+
+  node.append('title')
+    .text(d => {
+      if (d.label === 'Panelist') {
+        return `${d.name}\n${d.age || ''} · ${d.region || ''}\n${d.occupation || ''}`
+      }
+      return `${d.label}: ${d.key}`
+    })
+
+  node.append('text')
+    .text(d => d.label === 'Panelist' ? d.name.split(' ')[0] : d.key)
+    .attr('x', d => (labelRadius[d.label] || 8) + 4)
+    .attr('y', 4)
+    .attr('font-size', 11)
+    .attr('fill', '#1f2937')
+
+  simulation.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y)
+    node.attr('transform', d => `translate(${d.x},${d.y})`)
+  })
+}
+
 onMounted(refreshStudies)
 onUnmounted(() => {
   if (pollHandle) clearInterval(pollHandle)
+  if (simulation) simulation.stop()
 })
 </script>
 
@@ -255,4 +401,28 @@ pre.report { background: #f8fafc; color: #1f2937; }
 
 .headline { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px;
   background: #f0fdf4; padding: 10px 14px; border-radius: 8px; font-size: 14px; }
+
+.graph-svg {
+  display: block;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  width: 100%;
+  height: 520px;
+}
+.graph-svg text { user-select: none; pointer-events: none; }
+.graph-legend { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
+.legend-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 10px; border-radius: 9999px; font-size: 12px;
+  background: #f3f4f6; color: #1f2937;
+}
+.legend-pill::before {
+  content: ""; width: 9px; height: 9px; border-radius: 50%;
+  display: inline-block; background: #6b7280;
+}
+.legend-pill[data-lbl="Panelist"]::before { background: #2563eb; }
+.legend-pill[data-lbl="Genre"]::before    { background: #65a30d; }
+.legend-pill[data-lbl="Slot"]::before     { background: #b45309; }
+.legend-pill[data-lbl="Brief"]::before    { background: #be185d; }
 </style>
