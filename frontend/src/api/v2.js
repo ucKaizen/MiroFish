@@ -39,3 +39,15 @@ export function getRunReportMarkdown(run_id) {
     transformResponse: [(data) => data]
   })
 }
+
+export function listGraphs() {
+  return service({ url: '/api/v2/graphs', method: 'get' })
+}
+
+export function getGraph(graph_id, opts = {}) {
+  return service({
+    url: `/api/v2/graphs/${graph_id}`,
+    method: 'get',
+    params: opts
+  })
+}

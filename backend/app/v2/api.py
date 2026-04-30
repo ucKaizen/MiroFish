@@ -203,6 +203,120 @@ def get_run_log(run_id: str) -> Response:
     return jsonify({"success": True, "data": status["log"]})
 
 
+# ---------- graph inspection ----------
+#
+# Read-only endpoints that surface the typed graph that v2 wrote into Neo4j.
+# Useful when the Neo4j Browser isn't reachable (e.g. on Railway where the
+# graphdb service is private).
+
+@v2_bp.route("/graphs", methods=["GET"])
+def list_graphs() -> Response:
+    """List every graph_id that has at least one node, with per-label counts."""
+    try:
+        from neo4j import GraphDatabase
+    except ImportError:
+        return jsonify({"success": False, "error": "neo4j driver unavailable"}), 503
+
+    uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+    user = os.environ.get("NEO4J_USER", "neo4j")
+    password = os.environ.get("NEO4J_PASSWORD", "mirofish-local-password")
+    try:
+        driver = GraphDatabase.driver(uri, auth=(user, password))
+        with driver.session() as session:
+            rows = session.run(
+                "MATCH (n) WHERE n.graph_id IS NOT NULL "
+                "RETURN n.graph_id AS gid, labels(n)[0] AS label, count(*) AS c "
+                "ORDER BY gid, label"
+            )
+            agg: dict[str, dict[str, int]] = {}
+            for r in rows:
+                agg.setdefault(r["gid"], {})[r["label"]] = r["c"]
+        driver.close()
+    except Exception as e:
+        return jsonify({"success": False, "error": f"neo4j query failed: {e}"}), 503
+    return jsonify({"success": True,
+                    "data": [{"graph_id": gid, "label_counts": cnt}
+                             for gid, cnt in sorted(agg.items())]})
+
+
+@v2_bp.route("/graphs/<graph_id>", methods=["GET"])
+def get_graph(graph_id: str) -> Response:
+    """Return the full typed graph as a node + edge list. Embeddings stripped.
+
+    Query params:
+      ?label=Panelist     filter nodes to one label
+      ?include_brief=0    drop the Brief node from the result
+    """
+    try:
+        from neo4j import GraphDatabase
+    except ImportError:
+        return jsonify({"success": False, "error": "neo4j driver unavailable"}), 503
+
+    label_filter = request.args.get("label")
+    include_brief = request.args.get("include_brief", "1") != "0"
+
+    uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+    user = os.environ.get("NEO4J_USER", "neo4j")
+    password = os.environ.get("NEO4J_PASSWORD", "mirofish-local-password")
+    try:
+        driver = GraphDatabase.driver(uri, auth=(user, password))
+        with driver.session() as session:
+            node_rows = session.run(
+                "MATCH (n {graph_id: $gid}) "
+                "RETURN id(n) AS nid, labels(n) AS labels, "
+                "       n._key AS key, properties(n) AS props",
+                gid=graph_id,
+            )
+            nodes = []
+            id_to_label_key: dict[int, tuple[str, str]] = {}
+            for r in node_rows:
+                labels = list(r["labels"]) or ["Node"]
+                if label_filter and label_filter not in labels:
+                    continue
+                if not include_brief and "Brief" in labels:
+                    continue
+                primary = next((l for l in labels if l != "Entity"), labels[0])
+                clean_props = {k: v for k, v in (r["props"] or {}).items()
+                               if k not in ("_key_field",) and not k.startswith("_")
+                               or k == "_key"}
+                nodes.append({
+                    "id":     str(r["nid"]),
+                    "label":  primary,
+                    "key":    r["key"],
+                    "props":  clean_props,
+                })
+                id_to_label_key[r["nid"]] = (primary, r["key"])
+
+            edge_rows = session.run(
+                "MATCH (s {graph_id: $gid})-[r]->(t {graph_id: $gid}) "
+                "RETURN id(r) AS rid, type(r) AS type, "
+                "       id(s) AS sid, id(t) AS tid, properties(r) AS props",
+                gid=graph_id,
+            )
+            edges = []
+            for r in edge_rows:
+                if r["sid"] not in id_to_label_key or r["tid"] not in id_to_label_key:
+                    continue
+                edges.append({
+                    "id":     str(r["rid"]),
+                    "type":   r["type"],
+                    "source": str(r["sid"]),
+                    "target": str(r["tid"]),
+                    "props":  dict(r["props"] or {}),
+                })
+        driver.close()
+    except Exception as e:
+        return jsonify({"success": False, "error": f"neo4j query failed: {e}"}), 503
+
+    return jsonify({"success": True, "data": {
+        "graph_id": graph_id,
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+        "nodes": nodes,
+        "edges": edges,
+    }})
+
+
 # ---------- background worker ----------
 
 def _execute_run(run_id: str, study_record: dict[str, Any],

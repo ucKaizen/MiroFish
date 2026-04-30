@@ -6,6 +6,7 @@ import SimulationRunView from '../views/SimulationRunView.vue'
 import ReportView from '../views/ReportView.vue'
 import InteractionView from '../views/InteractionView.vue'
 import V2RunView from '../views/V2RunView.vue'
+import V2GraphView from '../views/V2GraphView.vue'
 
 const routes = [
   {
@@ -17,6 +18,11 @@ const routes = [
     path: '/v2',
     name: 'V2Run',
     component: V2RunView
+  },
+  {
+    path: '/v2/graph',
+    name: 'V2Graph',
+    component: V2GraphView
   },
   {
     path: '/process/:projectId',
