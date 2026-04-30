@@ -73,6 +73,10 @@ def create_app(config_class=Config):
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
     app.register_blueprint(simulation_bp, url_prefix='/api/simulation')
     app.register_blueprint(report_bp, url_prefix='/api/report')
+
+    # v2 — schema-direct, no-fork pipeline. Mounts under /api/v2/*.
+    from .v2.api import v2_bp
+    app.register_blueprint(v2_bp, url_prefix='/api/v2')
     
     # 健康检查
     @app.route('/health')

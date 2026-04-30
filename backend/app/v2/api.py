@@ -1,0 +1,320 @@
+"""
+v2 Flask blueprint — schema-direct study runs over HTTP.
+
+Endpoints (all under ``/api/v2``):
+
+  POST  /studies/from-disk    register a known seed dir as a study
+  GET   /studies              list registered studies
+  POST  /runs                 start a run for a study (background thread)
+  GET   /runs                 list runs
+  GET   /runs/<run_id>        run status + headline metrics
+  GET   /runs/<run_id>/report rendered markdown
+  GET   /runs/<run_id>/posts  jsonl posts
+  GET   /runs/<run_id>/trace  jsonl decisions
+  GET   /runs/<run_id>/log    streaming run log
+
+Runs are persisted under ``backend/uploads/v2_runs/<run_id>/``.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import threading
+import time
+import uuid
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any
+
+from flask import Blueprint, Response, jsonify, request, send_file
+
+from .cli import main as _cli_main_unused              # noqa: F401  (lint anchor)
+from .graph_writer import GraphWriter
+from .loaders import load_study
+from .metrics import compute_metrics
+from .narrator import render_report_offline, render_report_with_llm
+from .persona import project_personas
+from .runner import MiniRunner
+from .salience import SalienceScorer
+
+
+logger = logging.getLogger("mirofish.v2.api")
+v2_bp = Blueprint("v2", __name__)
+
+
+# ---------- on-disk layout ----------
+
+UPLOADS_ROOT = Path(__file__).resolve().parents[2] / "uploads"
+STUDIES_INDEX = UPLOADS_ROOT / "v2_studies.json"
+RUNS_ROOT = UPLOADS_ROOT / "v2_runs"
+
+UPLOADS_ROOT.mkdir(parents=True, exist_ok=True)
+RUNS_ROOT.mkdir(parents=True, exist_ok=True)
+
+
+# ---------- in-process state ----------
+
+_runs_lock = threading.Lock()
+_runs: dict[str, dict[str, Any]] = {}                  # run_id -> mutable status
+
+
+# ---------- studies ----------
+
+@v2_bp.route("/studies/from-disk", methods=["POST"])
+def register_study_from_disk() -> Response:
+    """Register a study that lives on disk. Body: {"path": "..."}.
+
+    Used to pin one of the seed studies under ``backend/seeds/`` to a friendly
+    id without uploading anything.
+    """
+    body = request.get_json(silent=True) or {}
+    path_str = body.get("path", "").strip()
+    if not path_str:
+        return jsonify({"success": False, "error": "missing 'path'"}), 400
+    p = Path(path_str)
+    if not p.is_absolute():
+        p = (Path(__file__).resolve().parents[2] / p).resolve()
+    if not p.exists():
+        return jsonify({"success": False, "error": f"path not found: {p}"}), 404
+
+    try:
+        s = load_study(p)
+    except Exception as e:
+        return jsonify({"success": False, "error": f"failed to load: {e}"}), 400
+
+    record = {
+        "study_id":    s.study_id,
+        "name":        s.name,
+        "description": s.description,
+        "path":        str(p),
+        "panelists":   len(s.nodes),
+        "edges":       len(s.edges),
+        "brief": {
+            "content_id": s.brief.content_id,
+            "title":      s.brief.title,
+            "air_date":   s.brief.air_date,
+        },
+        "registered_at": _iso_now(),
+    }
+    _index_put(record)
+    return jsonify({"success": True, "data": record})
+
+
+@v2_bp.route("/studies", methods=["GET"])
+def list_studies() -> Response:
+    return jsonify({"success": True, "data": _index_load()})
+
+
+# ---------- runs ----------
+
+@v2_bp.route("/runs", methods=["POST"])
+def start_run() -> Response:
+    body = request.get_json(silent=True) or {}
+    study_id = (body.get("study_id") or "").strip()
+    rounds = int(body.get("rounds") or 2)
+    skip_neo4j = bool(body.get("skip_neo4j", False))
+    no_llm_narrator = bool(body.get("no_llm_narrator", False))
+
+    studies = {s["study_id"]: s for s in _index_load()}
+    if study_id not in studies:
+        return jsonify({"success": False,
+                         "error": f"unknown study_id {study_id!r}; "
+                                  f"register it via /api/v2/studies/from-disk first"}), 404
+    study_record = studies[study_id]
+
+    run_id = f"v2_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+    run_dir = RUNS_ROOT / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    status = {
+        "run_id":        run_id,
+        "study_id":      study_id,
+        "study_name":    study_record["name"],
+        "status":        "starting",
+        "step":          0,
+        "step_total":    6,
+        "started_at":    _iso_now(),
+        "finished_at":   None,
+        "rounds":        rounds,
+        "skip_neo4j":    skip_neo4j,
+        "no_llm_narrator": no_llm_narrator,
+        "posts_dir":     str(run_dir),
+        "error":         None,
+        "headline":      None,
+        "log":           [],
+    }
+    with _runs_lock:
+        _runs[run_id] = status
+
+    t = threading.Thread(
+        target=_execute_run, args=(run_id, study_record, run_dir),
+        name=f"v2-run-{run_id}", daemon=True,
+    )
+    t.start()
+    return jsonify({"success": True, "data": status}), 202
+
+
+@v2_bp.route("/runs", methods=["GET"])
+def list_runs() -> Response:
+    with _runs_lock:
+        snapshot = list(_runs.values())
+    snapshot.sort(key=lambda r: r["started_at"], reverse=True)
+    # Strip log blob from listing.
+    return jsonify({"success": True,
+                    "data": [{k: v for k, v in r.items() if k != "log"}
+                             for r in snapshot]})
+
+
+@v2_bp.route("/runs/<run_id>", methods=["GET"])
+def get_run(run_id: str) -> Response:
+    with _runs_lock:
+        status = _runs.get(run_id)
+    if status is None:
+        return jsonify({"success": False, "error": "run not found"}), 404
+    return jsonify({"success": True, "data": status})
+
+
+@v2_bp.route("/runs/<run_id>/report", methods=["GET"])
+def get_run_report(run_id: str) -> Response:
+    md_path = RUNS_ROOT / run_id / "report.md"
+    if not md_path.exists():
+        return jsonify({"success": False, "error": "report not yet generated"}), 404
+    return Response(md_path.read_text(encoding="utf-8"),
+                    mimetype="text/markdown; charset=utf-8")
+
+
+@v2_bp.route("/runs/<run_id>/posts", methods=["GET"])
+def get_run_posts(run_id: str) -> Response:
+    return _serve_jsonl(RUNS_ROOT / run_id / "posts.jsonl")
+
+
+@v2_bp.route("/runs/<run_id>/trace", methods=["GET"])
+def get_run_trace(run_id: str) -> Response:
+    return _serve_jsonl(RUNS_ROOT / run_id / "trace.jsonl")
+
+
+@v2_bp.route("/runs/<run_id>/log", methods=["GET"])
+def get_run_log(run_id: str) -> Response:
+    with _runs_lock:
+        status = _runs.get(run_id)
+    if status is None:
+        return jsonify({"success": False, "error": "run not found"}), 404
+    return jsonify({"success": True, "data": status["log"]})
+
+
+# ---------- background worker ----------
+
+def _execute_run(run_id: str, study_record: dict[str, Any],
+                 run_dir: Path) -> None:
+    log = lambda msg: _append_log(run_id, msg)
+    try:
+        log("loading study")
+        _set_status(run_id, status="loading", step=1)
+        study = load_study(study_record["path"])
+
+        if not _runs[run_id]["skip_neo4j"]:
+            log("writing graph to Neo4j")
+            _set_status(run_id, status="graph", step=2)
+            uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+            user = os.environ.get("NEO4J_USER", "neo4j")
+            password = os.environ.get("NEO4J_PASSWORD", "mirofish-local-password")
+            gw = GraphWriter(uri, user, password)
+            try:
+                stats = gw.write_study(study, graph_id=f"v2_{study.study_id}")
+                log(f"graph: {stats.identity_nodes} nodes, "
+                    f"{stats.target_nodes} targets, {stats.edges} edges")
+            finally:
+                gw.close()
+
+        log("projecting personas")
+        _set_status(run_id, status="projecting", step=3)
+        personas, _ = project_personas(study)
+        log(f"projected {len(personas)} personas")
+
+        log("running engagement gate + LLM reactions")
+        _set_status(run_id, status="simulating", step=4)
+        scorer = SalienceScorer()
+        runner = MiniRunner()
+        result = runner.run(study, personas, scorer,
+                            rounds=_runs[run_id]["rounds"],
+                            run_id=run_id)
+        result.write_jsonl(run_dir)
+        (run_dir / "run.json").write_text(
+            json.dumps(result.as_dict(), indent=2, default=str), encoding="utf-8"
+        )
+        log(f"sim: {result.posts_created} posts, {result.llm_calls} LLM calls, "
+            f"{len(result.decisions)} decisions")
+
+        log("computing metrics")
+        _set_status(run_id, status="metrics", step=5)
+        report = compute_metrics(personas, result)
+        (run_dir / "metrics.json").write_text(
+            json.dumps(report.as_dict(), indent=2), encoding="utf-8"
+        )
+        h = report.headline
+        log(f"reach={h.reach}/{h.panel_size} engagement={h.engagement}/{h.panel_size} "
+            f"AI={'-' if h.appreciation_index is None else round(h.appreciation_index, 1)} "
+            f"clarity_risk={h.clarity_risk}/{h.panel_size}")
+
+        log("rendering report")
+        _set_status(run_id, status="reporting", step=6)
+        if _runs[run_id]["no_llm_narrator"]:
+            md = render_report_offline(study.name, study.brief.title, report)
+        else:
+            md = render_report_with_llm(study.name, study.brief.title, report, result)
+        (run_dir / "report.md").write_text(md, encoding="utf-8")
+
+        _set_status(run_id, status="done", step=6,
+                    finished_at=_iso_now(),
+                    headline=asdict(report.headline))
+        log("done")
+    except Exception as e:                              # pragma: no cover
+        logger.exception("v2 run failed: %s", e)
+        log(f"ERROR: {e}")
+        _set_status(run_id, status="failed", error=str(e),
+                    finished_at=_iso_now())
+
+
+# ---------- helpers ----------
+
+def _index_load() -> list[dict[str, Any]]:
+    if not STUDIES_INDEX.exists():
+        return []
+    try:
+        return json.loads(STUDIES_INDEX.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def _index_put(record: dict[str, Any]) -> None:
+    items = _index_load()
+    items = [r for r in items if r["study_id"] != record["study_id"]]
+    items.append(record)
+    items.sort(key=lambda r: r["study_id"])
+    STUDIES_INDEX.write_text(json.dumps(items, indent=2), encoding="utf-8")
+
+
+def _serve_jsonl(path: Path) -> Response:
+    if not path.exists():
+        return jsonify({"success": False, "error": "file not found"}), 404
+    return send_file(path, mimetype="application/x-jsonlines")
+
+
+def _set_status(run_id: str, **fields) -> None:
+    with _runs_lock:
+        if run_id in _runs:
+            _runs[run_id].update(fields)
+
+
+def _append_log(run_id: str, msg: str) -> None:
+    line = f"{_iso_now()}  {msg}"
+    logger.info("[v2 run %s] %s", run_id, msg)
+    with _runs_lock:
+        if run_id in _runs:
+            _runs[run_id]["log"].append(line)
+
+
+def _iso_now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
