@@ -10,6 +10,17 @@ export function registerStudyFromDisk(path) {
   return service({ url: '/api/v2/studies/from-disk', method: 'post', data: { path } })
 }
 
+export function uploadStudy(file) {
+  const form = new FormData()
+  form.append('file', file)
+  return service({
+    url: '/api/v2/studies/upload',
+    method: 'post',
+    data: form,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
 export function startRun({ study_id, rounds = 2, skip_neo4j = false, no_llm_narrator = false }) {
   return service({
     url: '/api/v2/runs',

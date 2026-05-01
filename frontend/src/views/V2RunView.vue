@@ -10,40 +10,71 @@
 
     <section class="card">
       <h2>1. Studies</h2>
+
       <div class="row">
-        <input
-          v-model="newStudyPath"
-          type="text"
-          placeholder="seeds/bbc_panel/study.json"
-          class="grow"
-        />
-        <button :disabled="!newStudyPath || registering" @click="registerStudy">
-          {{ registering ? 'Registering…' : 'Register study' }}
+        <label class="file-pick">
+          <input type="file" accept=".zip,.json" @change="onFilePicked" />
+          <span>Choose study (.zip with study.json + CSVs, or bare study.json)</span>
+        </label>
+        <button :disabled="!pickedFile || uploading" @click="uploadPicked">
+          {{ uploading ? 'Uploading…' : 'Upload study' }}
         </button>
       </div>
-      <p v-if="registerError" class="error">{{ registerError }}</p>
+      <p v-if="pickedFile" class="muted small">Picked: {{ pickedFile.name }} ({{ humanSize(pickedFile.size) }})</p>
+      <p v-if="uploadError" class="error">{{ uploadError }}</p>
+
+      <details class="from-disk">
+        <summary>or register a server-side path</summary>
+        <div class="row">
+          <input
+            v-model="newStudyPath"
+            type="text"
+            placeholder="seeds/bbc_panel/study.json"
+            class="grow"
+          />
+          <button :disabled="!newStudyPath || registering" @click="registerStudy">
+            {{ registering ? 'Registering…' : 'Register from path' }}
+          </button>
+        </div>
+        <p v-if="registerError" class="error">{{ registerError }}</p>
+      </details>
 
       <table v-if="studies.length" class="grid">
         <thead>
           <tr>
+            <th></th>
             <th>study_id</th>
             <th>name</th>
             <th>panelists</th>
             <th>edges</th>
             <th>brief</th>
-            <th></th>
+            <th>files</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="s in studies" :key="s.study_id"
-              :class="{ selected: selectedStudyId === s.study_id }">
+              :class="{ selected: selectedStudyId === s.study_id }"
+              @click="selectedStudyId = s.study_id">
+            <td>
+              <input type="radio"
+                     :value="s.study_id"
+                     v-model="selectedStudyId"
+                     :name="'pick-study'" />
+            </td>
             <td><code>{{ s.study_id }}</code></td>
             <td>{{ s.name }}</td>
             <td>{{ s.panelists }}</td>
             <td>{{ s.edges }}</td>
             <td>{{ s.brief.title }} ({{ s.brief.air_date }})</td>
-            <td>
-              <button @click="selectedStudyId = s.study_id">Select</button>
+            <td class="file-cell">
+              <a :href="`/api/v2/studies/${s.study_id}/json`"
+                 :download="`${s.study_id}.json`"
+                 class="link"
+                 @click.stop>study.json</a>
+              <a :href="`/api/v2/studies/${s.study_id}/bundle`"
+                 :download="`${s.study_id}.zip`"
+                 class="link"
+                 @click.stop>full .zip</a>
             </td>
           </tr>
         </tbody>
@@ -53,6 +84,12 @@
 
     <section class="card">
       <h2>2. Run</h2>
+      <p v-if="selectedStudy" class="selection">
+        Selected: <strong>{{ selectedStudy.name }}</strong>
+        — <code>{{ selectedStudy.study_id }}</code>
+        ({{ selectedStudy.panelists }} panelists, {{ selectedStudy.edges }} edges)
+      </p>
+      <p v-else class="muted">Pick a study above (radio in the table).</p>
       <div class="row">
         <label>Rounds
           <input v-model.number="rounds" type="number" min="1" max="5" class="narrow" />
@@ -67,7 +104,6 @@
           {{ running ? 'Running…' : 'Run simulation' }}
         </button>
       </div>
-      <p v-if="!selectedStudyId" class="muted">Select a study above first.</p>
       <p v-if="runError" class="error">{{ runError }}</p>
     </section>
 
@@ -76,6 +112,14 @@
       <p>
         <strong>{{ activeRun.status }}</strong>
         — step {{ activeRun.step }} / {{ activeRun.step_total }}
+        <span class="downloads">
+          <a :href="`/api/v2/studies/${activeRun.study_id}/json`"
+             :download="`${activeRun.study_id}.json`"
+             class="link">study.json</a>
+          <a :href="`/api/v2/studies/${activeRun.study_id}/bundle`"
+             :download="`${activeRun.study_id}.zip`"
+             class="link">full bundle .zip</a>
+        </span>
       </p>
       <pre class="log">{{ logText }}</pre>
       <div v-if="activeRun.headline" class="headline">
@@ -90,8 +134,8 @@
       <h2>4. Graph</h2>
       <p class="muted">
         Typed graph that the v2 loader wrote into Neo4j for this study.
-        {{ graphData.node_count }} nodes, {{ graphData.edge_count }} edges. Hover a
-        node for details. Drag to reposition.
+        {{ graphData.node_count }} nodes, {{ graphData.edge_count }} edges.
+        Click any node to see its full attributes.
       </p>
       <div class="graph-legend">
         <span class="legend-pill" data-lbl="Panelist">Panelist</span>
@@ -99,7 +143,42 @@
         <span class="legend-pill" data-lbl="Slot">Slot</span>
         <span class="legend-pill" data-lbl="Brief">Brief</span>
       </div>
-      <svg ref="graphSvg" class="graph-svg" :width="graphWidth" :height="graphHeight"></svg>
+      <div class="graph-flex">
+        <svg ref="graphSvg" class="graph-svg" :width="graphWidth" :height="graphHeight"></svg>
+        <aside class="node-panel">
+          <div v-if="!selectedNode" class="muted small">
+            Click a node to inspect.
+          </div>
+          <div v-else>
+            <div class="node-head">
+              <span class="legend-pill" :data-lbl="selectedNode.label">{{ selectedNode.label }}</span>
+              <code>{{ selectedNode.key }}</code>
+            </div>
+            <h4 v-if="selectedNode.props && (selectedNode.props.name || selectedNode.props.title)">
+              {{ selectedNode.props.name || selectedNode.props.title }}
+            </h4>
+            <table class="props">
+              <tbody>
+                <tr v-for="(v, k) in flatProps(selectedNode.props)" :key="k">
+                  <th>{{ k }}</th>
+                  <td><pre>{{ v }}</pre></td>
+                </tr>
+              </tbody>
+            </table>
+            <h5 v-if="selectedEdges.length">Edges ({{ selectedEdges.length }})</h5>
+            <ul class="edge-list">
+              <li v-for="(e, i) in selectedEdges" :key="i">
+                <code>{{ e.dir }}</code>
+                <span class="etype">{{ e.type }}</span>
+                <code>{{ e.otherLabel }}:{{ e.otherKey }}</code>
+                <span v-if="e.props && Object.keys(e.props).length" class="muted small">
+                  {{ JSON.stringify(e.props) }}
+                </span>
+              </li>
+            </ul>
+          </div>
+        </aside>
+      </div>
       <p v-if="graphError" class="error">{{ graphError }}</p>
     </section>
 
@@ -120,15 +199,19 @@ import {
   getRunReportMarkdown,
   listStudies,
   registerStudyFromDisk,
-  startRun
+  startRun,
+  uploadStudy
 } from '../api/v2'
 
 const studies = ref([])
 const selectedStudyId = ref('')
 const newStudyPath = ref('seeds/bbc_panel/study.json')
+const pickedFile = ref(null)
 
 const registering = ref(false)
 const registerError = ref('')
+const uploading = ref(false)
+const uploadError = ref('')
 
 const running = ref(false)
 const runError = ref('')
@@ -138,16 +221,54 @@ const reportMarkdown = ref('')
 const graphData = ref(null)
 const graphError = ref('')
 const graphSvg = ref(null)
-const graphWidth = 880
+const graphWidth = 620
 const graphHeight = 520
+const selectedNode = ref(null)
 let pollHandle = null
 let simulation = null
 
 const logText = computed(() => (activeRun.value?.log || []).join('\n'))
+const selectedStudy = computed(() =>
+  studies.value.find(s => s.study_id === selectedStudyId.value) || null
+)
+
+const selectedEdges = computed(() => {
+  if (!selectedNode.value || !graphData.value) return []
+  const id = selectedNode.value.id
+  const byId = new Map(graphData.value.nodes.map(n => [n.id, n]))
+  const out = []
+  for (const e of graphData.value.edges) {
+    if (e.source === id) {
+      const other = byId.get(e.target)
+      out.push({ dir: '→', type: e.type, otherLabel: other?.label, otherKey: other?.key, props: e.props })
+    } else if (e.target === id) {
+      const other = byId.get(e.source)
+      out.push({ dir: '←', type: e.type, otherLabel: other?.label, otherKey: other?.key, props: e.props })
+    }
+  }
+  return out
+})
 
 function aiStr(v) {
   if (v === null || v === undefined) return '—'
   return Number(v).toFixed(1)
+}
+
+function humanSize(n) {
+  if (!n && n !== 0) return ''
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(2)} MB`
+}
+
+function flatProps(p) {
+  if (!p) return {}
+  const out = {}
+  for (const [k, v] of Object.entries(p)) {
+    if (k.startsWith('_') && k !== '_key') continue
+    out[k] = typeof v === 'object' && v !== null ? JSON.stringify(v, null, 2) : v
+  }
+  return out
 }
 
 async function refreshStudies() {
@@ -162,14 +283,40 @@ async function refreshStudies() {
   }
 }
 
+function onFilePicked(ev) {
+  uploadError.value = ''
+  pickedFile.value = ev.target.files && ev.target.files[0] ? ev.target.files[0] : null
+}
+
+async function uploadPicked() {
+  if (!pickedFile.value) return
+  uploadError.value = ''
+  uploading.value = true
+  try {
+    const res = await uploadStudy(pickedFile.value)
+    if (res && res.data && res.data.study_id) {
+      selectedStudyId.value = res.data.study_id
+    }
+    pickedFile.value = null
+    await refreshStudies()
+  } catch (err) {
+    uploadError.value = String(err?.response?.data?.error || err?.message || err)
+  } finally {
+    uploading.value = false
+  }
+}
+
 async function registerStudy() {
   registerError.value = ''
   registering.value = true
   try {
-    await registerStudyFromDisk(newStudyPath.value.trim())
+    const res = await registerStudyFromDisk(newStudyPath.value.trim())
+    if (res && res.data && res.data.study_id) {
+      selectedStudyId.value = res.data.study_id
+    }
     await refreshStudies()
   } catch (err) {
-    registerError.value = String(err?.message || err)
+    registerError.value = String(err?.response?.data?.error || err?.message || err)
   } finally {
     registering.value = false
   }
@@ -183,6 +330,8 @@ async function kickOffRun() {
   runError.value = ''
   running.value = true
   reportMarkdown.value = ''
+  selectedNode.value = null
+  graphData.value = null
   try {
     const res = await startRun({
       study_id: selectedStudyId.value,
@@ -227,10 +376,8 @@ async function pollUntilDone() {
 async function loadAndRenderGraph(study_id) {
   graphError.value = ''
   graphData.value = null
-  if (skipNeo4j.value) {
-    // Run was started with skip-Neo4j; nothing was written.
-    return
-  }
+  selectedNode.value = null
+  if (skipNeo4j.value) return
   try {
     const graph_id = `v2_${study_id}`
     const res = await getGraph(graph_id)
@@ -253,7 +400,6 @@ function renderGraph(data) {
   const width = graphWidth
   const height = graphHeight
 
-  // Pre-scale propensity edges so that strong propensities pull harder.
   const links = data.edges.map(e => ({
     source: e.source,
     target: e.target,
@@ -264,10 +410,8 @@ function renderGraph(data) {
     id: n.id,
     label: n.label,
     key: n.key,
-    name: (n.props && (n.props.name || n.props.title)) || n.key,
-    age: n.props && n.props.age,
-    region: n.props && n.props.region,
-    occupation: n.props && n.props.occupation
+    raw: n,
+    name: (n.props && (n.props.name || n.props.title)) || n.key
   }))
 
   const labelColor = {
@@ -303,6 +447,13 @@ function renderGraph(data) {
     .selectAll('g')
     .data(nodes)
     .enter().append('g')
+    .style('cursor', 'pointer')
+    .on('click', (event, d) => {
+      selectedNode.value = d.raw
+      svg.selectAll('g.node-group circle').attr('stroke-width', 1.5)
+      d3.select(event.currentTarget).select('circle').attr('stroke-width', 3.5)
+    })
+    .attr('class', 'node-group')
     .call(d3.drag()
       .on('start', (event, d) => {
         if (!event.active) simulation.alphaTarget(0.3).restart()
@@ -321,12 +472,7 @@ function renderGraph(data) {
     .attr('stroke-width', 1.5)
 
   node.append('title')
-    .text(d => {
-      if (d.label === 'Panelist') {
-        return `${d.name}\n${d.age || ''} · ${d.region || ''}\n${d.occupation || ''}`
-      }
-      return `${d.label}: ${d.key}`
-    })
+    .text(d => `${d.label}: ${d.name}`)
 
   node.append('text')
     .text(d => d.label === 'Panelist' ? d.name.split(' ')[0] : d.key)
@@ -352,7 +498,7 @@ onUnmounted(() => {
 
 <style scoped>
 .v2-shell {
-  max-width: 980px;
+  max-width: 1100px;
   margin: 24px auto;
   padding: 0 16px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -360,6 +506,7 @@ onUnmounted(() => {
 }
 .v2-header h1 { margin: 0 0 6px 0; font-size: 24px; }
 .muted { color: #6b7280; font-size: 14px; }
+.muted.small { font-size: 12px; }
 .error { color: #b91c1c; font-size: 14px; }
 
 .card {
@@ -380,6 +527,17 @@ onUnmounted(() => {
 .row label { font-size: 14px; }
 .checkbox { display: inline-flex; align-items: center; gap: 6px; }
 
+.file-pick {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px dashed #94a3b8; border-radius: 6px; padding: 6px 10px;
+  cursor: pointer; font-size: 13px;
+}
+.file-pick input[type="file"] { font-size: 12px; }
+
+.from-disk { margin-top: 4px; margin-bottom: 8px; }
+.from-disk summary { font-size: 13px; color: #6b7280; cursor: pointer; }
+.from-disk .row { margin-top: 8px; }
+
 button {
   border: 1px solid #2563eb; background: #2563eb; color: #fff;
   border-radius: 6px; padding: 6px 14px; font-size: 14px; cursor: pointer;
@@ -389,28 +547,85 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.grid th, table.grid td {
   text-align: left; padding: 6px 10px; border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
 }
+table.grid tbody tr { cursor: pointer; }
 table.grid tr.selected { background: #eef2ff; }
+table.grid td.file-cell { display: flex; gap: 10px; }
+.link { color: #2563eb; font-size: 13px; text-decoration: none; }
+.link:hover { text-decoration: underline; }
+.downloads { margin-left: 12px; font-size: 13px; display: inline-flex; gap: 12px; }
 
-pre.log, pre.report {
+.selection {
+  margin: 0 0 10px 0; padding: 8px 12px; border-radius: 6px;
+  background: #f0f9ff; border: 1px solid #bae6fd; font-size: 14px;
+}
+
+pre.log {
   background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px;
   font-size: 12.5px; line-height: 1.4; overflow-x: auto; white-space: pre-wrap;
   max-height: 480px; overflow-y: auto;
 }
-pre.report { background: #f8fafc; color: #1f2937; }
+pre.report {
+  background: #f8fafc; color: #1f2937;
+  padding: 14px; border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+               "Liberation Mono", "Courier New", monospace;
+  font-size: 13px; line-height: 1.55;
+  white-space: pre;
+  overflow-x: auto;
+  max-height: 640px; overflow-y: auto;
+  border: 1px solid #e2e8f0;
+}
 
 .headline { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px;
   background: #f0fdf4; padding: 10px 14px; border-radius: 8px; font-size: 14px; }
 
+.graph-flex {
+  display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap;
+}
 .graph-svg {
   display: block;
   background: #f8fafc;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  width: 100%;
+  flex: 1 1 560px;
   height: 520px;
 }
 .graph-svg text { user-select: none; pointer-events: none; }
+
+.node-panel {
+  flex: 1 1 320px;
+  max-width: 420px;
+  border: 1px solid #e5e7eb; border-radius: 8px;
+  padding: 12px; background: #ffffff;
+  overflow: auto; max-height: 520px;
+  font-size: 13px;
+}
+.node-panel h4 { margin: 6px 0 8px; font-size: 15px; }
+.node-panel h5 { margin: 12px 0 6px; font-size: 13px; color: #374151; }
+.node-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+table.props { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.props th {
+  text-align: left; vertical-align: top; padding: 4px 8px 4px 0;
+  color: #6b7280; font-weight: 500; width: 35%;
+}
+table.props td { padding: 4px 0; }
+table.props pre {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+.edge-list { padding-left: 0; list-style: none; margin: 4px 0 0; }
+.edge-list li {
+  padding: 3px 0; border-bottom: 1px dashed #f1f5f9;
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+}
+.edge-list .etype { font-size: 11px; color: #64748b; }
+
 .graph-legend { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
 .legend-pill {
   display: inline-flex; align-items: center; gap: 6px;

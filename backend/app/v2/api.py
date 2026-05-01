@@ -4,7 +4,10 @@ v2 Flask blueprint — schema-direct study runs over HTTP.
 Endpoints (all under ``/api/v2``):
 
   POST  /studies/from-disk    register a known seed dir as a study
+  POST  /studies/upload       upload a study (zip of study.json + CSVs)
   GET   /studies              list registered studies
+  GET   /studies/<id>/json    download the raw study.json
+  GET   /studies/<id>/bundle  download the full study dir as a zip
   POST  /runs                 start a run for a study (background thread)
   GET   /runs                 list runs
   GET   /runs/<run_id>        run status + headline metrics
@@ -104,6 +107,123 @@ def register_study_from_disk() -> Response:
 @v2_bp.route("/studies", methods=["GET"])
 def list_studies() -> Response:
     return jsonify({"success": True, "data": _index_load()})
+
+
+@v2_bp.route("/studies/upload", methods=["POST"])
+def upload_study() -> Response:
+    """Register a study by uploading a zip bundle (study.json + its CSVs).
+
+    A bare study.json is accepted only if it references no external CSVs —
+    in practice that never happens, so prefer zipping the whole study dir.
+    """
+    if "file" not in request.files:
+        return jsonify({"success": False,
+                         "error": "missing 'file' in multipart form"}), 400
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"success": False, "error": "empty filename"}), 400
+
+    import shutil
+    import zipfile
+
+    studies_dir = UPLOADS_ROOT / "v2_studies"
+    studies_dir.mkdir(parents=True, exist_ok=True)
+
+    stem = Path(f.filename).stem.strip().replace(" ", "_") or "upload"
+    target = studies_dir / f"{stem}_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+    target.mkdir(parents=True, exist_ok=False)
+
+    raw = target / f.filename
+    f.save(raw)
+
+    try:
+        if zipfile.is_zipfile(raw):
+            with zipfile.ZipFile(raw) as zf:
+                zf.extractall(target)
+            raw.unlink(missing_ok=True)
+            study_json = next(target.rglob("study.json"), None)
+            if study_json is None:
+                shutil.rmtree(target, ignore_errors=True)
+                return jsonify({"success": False,
+                                 "error": "zip did not contain a study.json"}), 400
+            study_dir = study_json.parent
+        elif raw.suffix.lower() == ".json":
+            study_dir = raw.parent
+            if raw.name != "study.json":
+                renamed = study_dir / "study.json"
+                raw.rename(renamed)
+        else:
+            shutil.rmtree(target, ignore_errors=True)
+            return jsonify({"success": False,
+                             "error": "expected a .zip or study.json"}), 400
+
+        try:
+            s = load_study(study_dir)
+        except Exception as e:
+            shutil.rmtree(target, ignore_errors=True)
+            return jsonify({"success": False,
+                             "error": f"failed to load study: {e}"}), 400
+    except Exception as e:                                  # pragma: no cover
+        shutil.rmtree(target, ignore_errors=True)
+        return jsonify({"success": False, "error": f"upload failed: {e}"}), 500
+
+    record = {
+        "study_id":    s.study_id,
+        "name":        s.name,
+        "description": s.description,
+        "path":        str(study_dir / "study.json"),
+        "panelists":   len(s.nodes),
+        "edges":       len(s.edges),
+        "brief": {
+            "content_id": s.brief.content_id,
+            "title":      s.brief.title,
+            "air_date":   s.brief.air_date,
+        },
+        "registered_at": _iso_now(),
+    }
+    _index_put(record)
+    return jsonify({"success": True, "data": record})
+
+
+@v2_bp.route("/studies/<study_id>/json", methods=["GET"])
+def download_study_json(study_id: str) -> Response:
+    """Serve the raw study.json for a registered study as a download."""
+    record = next((s for s in _index_load() if s["study_id"] == study_id), None)
+    if record is None:
+        return jsonify({"success": False, "error": "unknown study_id"}), 404
+    p = Path(record["path"])
+    if p.is_dir():
+        p = p / "study.json"
+    if not p.exists():
+        return jsonify({"success": False, "error": f"file missing on disk: {p}"}), 404
+    return send_file(p, mimetype="application/json",
+                     as_attachment=True, download_name=f"{study_id}.json")
+
+
+@v2_bp.route("/studies/<study_id>/bundle", methods=["GET"])
+def download_study_bundle(study_id: str) -> Response:
+    """Zip the entire study dir (study.json + all CSVs) and serve it."""
+    import io
+    import zipfile
+
+    record = next((s for s in _index_load() if s["study_id"] == study_id), None)
+    if record is None:
+        return jsonify({"success": False, "error": "unknown study_id"}), 404
+    src = Path(record["path"])
+    study_dir = src.parent if src.is_file() else src
+    if not study_dir.exists():
+        return jsonify({"success": False,
+                         "error": f"study dir missing: {study_dir}"}), 404
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for child in sorted(study_dir.iterdir()):
+            if child.is_file():
+                zf.write(child, arcname=child.name)
+    buf.seek(0)
+    return send_file(buf, mimetype="application/zip",
+                     as_attachment=True,
+                     download_name=f"{study_id}.zip")
 
 
 # ---------- runs ----------
