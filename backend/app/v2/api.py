@@ -59,6 +59,13 @@ RUNS_ROOT.mkdir(parents=True, exist_ok=True)
 # ---------- version stamp ----------
 
 def _git_short_sha() -> str:
+    # Prefer build/runtime env vars — the deployed image typically has no .git.
+    for var in ("RAILWAY_GIT_COMMIT_SHA", "GIT_COMMIT", "GIT_SHA",
+                "SOURCE_COMMIT", "VERCEL_GIT_COMMIT_SHA"):
+        v = os.environ.get(var)
+        if v:
+            return v[:7]
+
     import subprocess
     try:
         repo_root = Path(__file__).resolve().parents[3]

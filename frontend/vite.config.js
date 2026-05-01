@@ -4,6 +4,13 @@ import path from 'path'
 import { execSync } from 'child_process'
 
 function gitShortSha () {
+  // Prefer CI/build env vars — the docker build context has no .git.
+  const fromEnv = process.env.RAILWAY_GIT_COMMIT_SHA
+              || process.env.GIT_COMMIT
+              || process.env.GIT_SHA
+              || process.env.VERCEL_GIT_COMMIT_SHA
+              || process.env.SOURCE_COMMIT
+  if (fromEnv) return fromEnv.slice(0, 7)
   try {
     return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
       .toString().trim()
