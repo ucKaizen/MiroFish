@@ -25,6 +25,10 @@ export function uploadStudy(file) {
   })
 }
 
+export function deleteStudy(study_id) {
+  return service({ url: `/api/v2/studies/${encodeURIComponent(study_id)}`, method: 'delete' })
+}
+
 export function startRun({ study_id, rounds = 2, skip_neo4j = false, no_llm_narrator = false }) {
   return service({
     url: '/api/v2/runs',
