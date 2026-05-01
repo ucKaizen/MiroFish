@@ -1,0 +1,34 @@
+Predict how a panel of ten named technology evaluators will react to the
+public launch of MiroFish v2 on Hacker News on Tuesday 12 May 2026.
+
+The uploaded files describe (1) the product, (2) the ten evaluators with
+their voice registers, recorded behaviour, required and forbidden
+vocabulary, and (3) the launch context — discovery surfaces, topical
+interests, and the action menu the runner uses.
+
+For each evaluator, decide one action per round (DO_NOTHING, LIKE_POST,
+REPOST, CREATE_POST, REPLY), grounded in their recorded behaviour and
+the discovery channels where they peak. If they CREATE_POST or REPLY,
+write the post in their voice — respect their length range, voice
+register, required vocabulary, and forbidden vocabulary.
+
+Run two rounds:
+- Round 1 — exposure: each evaluator decides whether they see the
+  launch on launch day, given their slot propensities.
+- Round 2 — delayed exposure / reaction: evaluators with higher
+  delayed_exposure_propensity (Felipe, Wei, Diego, Karim) may react in
+  round 2 even if they did nothing in round 1.
+
+Constrain every prediction to the ten named evaluators. Do not invent
+features that are not described in the product overview. Distinguish
+between MiroFish v2 (the product being launched) and the BBC One
+Sherwood S2 example study it ships with — reactions should be to the
+product, not the example.
+
+The output report should contain:
+- A headline metric block: how many of the ten engage, how many post,
+  how many stay silent.
+- A per-evaluator block with the action they took each round and any
+  posts they wrote.
+- A short narrator section in plain English ("strategy desk tone")
+  summarising what the panel collectively signals about the launch.
