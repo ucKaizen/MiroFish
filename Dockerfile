@@ -6,6 +6,10 @@ FROM node:20-slim AS frontend-builder
 
 WORKDIR /build
 
+# Build-time git sha (Railway sets RAILWAY_GIT_COMMIT_SHA at build).
+ARG RAILWAY_GIT_COMMIT_SHA=""
+ENV RAILWAY_GIT_COMMIT_SHA=$RAILWAY_GIT_COMMIT_SHA
+
 # Install deps first for better layer caching
 COPY package.json package-lock.json ./
 COPY frontend/package.json frontend/package-lock.json ./frontend/
@@ -27,6 +31,10 @@ FROM python:3.11-slim AS runtime
 COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
 
 WORKDIR /app
+
+# Pass the build-time git sha through to the runtime so /api/v2/version reports it.
+ARG RAILWAY_GIT_COMMIT_SHA=""
+ENV RAILWAY_GIT_COMMIT_SHA=$RAILWAY_GIT_COMMIT_SHA
 
 # Install backend deps
 COPY backend/pyproject.toml backend/uv.lock ./backend/

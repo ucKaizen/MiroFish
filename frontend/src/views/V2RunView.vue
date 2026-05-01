@@ -22,6 +22,10 @@
       </div>
       <p v-if="pickedFile" class="muted small">Picked: {{ pickedFile.name }} ({{ humanSize(pickedFile.size) }})</p>
       <p v-if="uploadError" class="error">{{ uploadError }}</p>
+      <p v-if="uploadOk" class="ok small">
+        Uploaded <code>{{ uploadOk.study_id }}</code> at {{ uploadOk.registered_at }}
+        <span v-if="uploadOk.replaced"> (replaced existing entry — same study_id)</span>
+      </p>
 
       <details class="from-disk">
         <summary>or register a server-side path</summary>
@@ -48,6 +52,7 @@
             <th>panelists</th>
             <th>edges</th>
             <th>brief</th>
+            <th>registered</th>
             <th>files</th>
           </tr>
         </thead>
@@ -66,6 +71,7 @@
             <td>{{ s.panelists }}</td>
             <td>{{ s.edges }}</td>
             <td>{{ s.brief.title }} ({{ s.brief.air_date }})</td>
+            <td class="muted small">{{ s.registered_at || '—' }}</td>
             <td class="file-cell">
               <a :href="`/api/v2/studies/${s.study_id}/json`"
                  :download="`${s.study_id}.json`"
@@ -212,6 +218,7 @@ const registering = ref(false)
 const registerError = ref('')
 const uploading = ref(false)
 const uploadError = ref('')
+const uploadOk = ref(null)
 
 const running = ref(false)
 const runError = ref('')
@@ -291,11 +298,19 @@ function onFilePicked(ev) {
 async function uploadPicked() {
   if (!pickedFile.value) return
   uploadError.value = ''
+  uploadOk.value = null
   uploading.value = true
+  const before = new Set(studies.value.map(s => s.study_id))
   try {
     const res = await uploadStudy(pickedFile.value)
-    if (res && res.data && res.data.study_id) {
-      selectedStudyId.value = res.data.study_id
+    const rec = res && res.data
+    if (rec && rec.study_id) {
+      selectedStudyId.value = rec.study_id
+      uploadOk.value = {
+        study_id:      rec.study_id,
+        registered_at: rec.registered_at,
+        replaced:      before.has(rec.study_id),
+      }
     }
     pickedFile.value = null
     await refreshStudies()
@@ -508,6 +523,8 @@ onUnmounted(() => {
 .muted { color: #6b7280; font-size: 14px; }
 .muted.small { font-size: 12px; }
 .error { color: #b91c1c; font-size: 14px; }
+.ok { color: #166534; font-size: 13px; }
+.ok.small { font-size: 12px; }
 
 .card {
   background: #fff;
