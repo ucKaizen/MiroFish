@@ -57,7 +57,7 @@ for them — zero tokens spent.
 | `backend/app/v2/cli.py` | `python -m app.v2.cli run --study ... --out ...` |
 | `backend/app/v2/api.py` | Flask blueprint at `/api/v2/*` |
 | `backend/app/v2/fixtures/derive_bbc_panel.py` | tinytroupe-panel YAML → BBC seed CSVs |
-| `backend/seeds/bbc_panel/` | study.json + 5 CSVs (10 panelists) |
+| `backend/seeds/v2/bbc_panel/` | study.json + 5 CSVs (10 panelists) |
 | `backend/tests/v2/` | 29 tests, all passing |
 | `frontend/src/views/V2RunView.vue` | Single-page run UI with embedded graph picture |
 | `frontend/src/views/V2GraphView.vue` | Standalone graph inspector at /v2/graph |
@@ -84,7 +84,7 @@ for them — zero tokens spent.
 ### Browser
 
 1. Open http://localhost:5001/v2 (or the Railway URL)
-2. Register the seed: paste `seeds/bbc_panel/study.json`, click **Register study**
+2. Register the seed: paste `seeds/v2/bbc_panel/study.json`, click **Register study**
 3. Select the study, choose rounds (default 2)
 4. Click **Run simulation**
 5. After ~60 s the page shows: log → headline metrics → graph picture → markdown report
@@ -93,7 +93,7 @@ for them — zero tokens spent.
 
 ```bash
 python -m app.v2.cli run \
-    --study seeds/bbc_panel/study.json \
+    --study seeds/v2/bbc_panel/study.json \
     --out   uploads/v2_runs/bbc_panel \
     --rounds 2
 ```
@@ -105,7 +105,7 @@ Outputs `posts.jsonl`, `trace.jsonl`, `metrics.json`, `run.json`, `report.md`.
 ```bash
 curl -X POST http://localhost:5001/api/v2/studies/from-disk \
   -H 'content-type: application/json' \
-  -d '{"path":"seeds/bbc_panel/study.json"}'
+  -d '{"path":"seeds/v2/bbc_panel/study.json"}'
 
 curl -X POST http://localhost:5001/api/v2/runs \
   -H 'content-type: application/json' \

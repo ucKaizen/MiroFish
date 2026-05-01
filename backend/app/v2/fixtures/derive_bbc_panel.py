@@ -2,12 +2,12 @@
 One-shot fixture builder.
 
 Reads tinytroupe-panel/data/panel_seed.yaml + sherwood_brief.yaml from a sibling
-repo and emits the BBC panel as a star-schema study under seeds/bbc_panel/.
+repo and emits the BBC panel as a star-schema study under seeds/v2/bbc_panel/.
 
 Run from anywhere:
     python -m app.v2.fixtures.derive_bbc_panel \
         --tinytroupe ../../../tinytroupe-panel \
-        --out backend/seeds/bbc_panel
+        --out backend/seeds/v2/bbc_panel
 
 Re-run is idempotent. Drops files into <out>/ and prints a one-line summary.
 """

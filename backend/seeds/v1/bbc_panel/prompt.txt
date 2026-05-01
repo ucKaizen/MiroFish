@@ -1,0 +1,34 @@
+Predict how the ten named UK viewers in panel.md will react to the
+launch of BBC One's Sherwood Series 2, Episode 1, broadcast at 21:00
+on Sunday 25 August 2024 (and on iPlayer from launch night).
+
+The uploaded files describe (1) the panel — ten viewers with their
+voice registers, recorded behaviour for the day before launch
+(18 August 2024), required and forbidden vocabulary, and the channels
+and genres they engage with — and (2) the brief — the show being
+launched, with synopsis, slot, and grounding rules.
+
+For each panelist, decide one action per round (DO_NOTHING,
+LIKE_POST, REPOST, CREATE_POST, REPLY), grounded in their recorded
+behaviour and the channels where they peak. If they CREATE_POST or
+REPLY, write the post in their voice — respect their length range,
+voice register, required vocabulary, and forbidden vocabulary.
+
+Run two rounds:
+- Round 1 — exposure: each panelist decides whether they see the
+  launch on Sunday 25 August 2024, given their slot propensities.
+- Round 2 — delayed exposure / reaction: panelists with higher
+  delayed-exposure propensity (Daniel, Nikhil) may react in round 2
+  even if they did nothing in round 1.
+
+Constrain every prediction to the ten named panelists. Do not invent
+facts or programmes. Strict raters stay strict, generous raters stay
+generous.
+
+The output report should contain:
+- A headline metric block: how many of the ten engage, how many post,
+  how many stay silent, average appreciation index.
+- A per-panelist block with the action they took each round and any
+  posts they wrote.
+- A short narrator section in plain English ("strategy desk tone")
+  summarising what the panel collectively signals about the launch.

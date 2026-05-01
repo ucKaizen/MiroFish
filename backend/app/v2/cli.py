@@ -2,7 +2,7 @@
 v2 CLI — single entry point for the no-fork end-to-end loop.
 
     python -m app.v2.cli run \\
-        --study seeds/bbc_panel/study.json \\
+        --study seeds/v2/bbc_panel/study.json \\
         --out   uploads/v2_runs/bbc_panel \\
         --rounds 2
 
