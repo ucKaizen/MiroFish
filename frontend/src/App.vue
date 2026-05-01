@@ -91,23 +91,25 @@ button {
 
 .build-badge {
   position: fixed;
-  bottom: 6px;
-  right: 8px;
-  z-index: 9999;
+  bottom: 10px;
+  right: 12px;
+  z-index: 99999;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 10.5px;
-  color: #64748b;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffffff;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 6px 10px;
   pointer-events: auto;
   user-select: text;
   white-space: nowrap;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
 }
 .build-badge.mismatch {
-  color: #92400e;
-  background: #fef3c7;
-  border-color: #fbbf24;
+  color: #1e293b;
+  background: #fbbf24;
+  border-color: #d97706;
 }
 </style>
