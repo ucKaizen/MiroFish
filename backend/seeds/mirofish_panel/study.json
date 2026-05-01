@@ -1,0 +1,100 @@
+{
+  "study_id": "mirofish_v2_launch_panel_2026",
+  "name": "MiroFish v2 launch — evaluator panel",
+  "description": "10 evaluators (PMs, researchers, engineers, strategists, an academic, a competitor); predict reactions to MiroFish v2 launching on Hacker News on 2026-05-12.",
+  "identity": {
+    "label": "Panelist",
+    "key": "panelist_id",
+    "csv": "panelists.csv",
+    "columns": [
+      { "name": "panelist_id", "type": "string" },
+      { "name": "name", "type": "string" },
+      { "name": "age", "type": "int" },
+      { "name": "gender", "type": "string", "enum": ["F", "M", "X"] },
+      { "name": "region", "type": "string" },
+      { "name": "occupation", "type": "string" },
+      { "name": "household", "type": "string" },
+      { "name": "voice_register", "type": "string" },
+      { "name": "rater_bias", "type": "float" },
+      { "name": "clarity_sensitivity", "type": "string", "enum": ["low", "medium", "high"] },
+      { "name": "delayed_exposure_propensity", "type": "float" },
+      { "name": "length_min_chars", "type": "int" },
+      { "name": "length_max_chars", "type": "int" },
+      { "name": "recorded_behaviour", "type": "string" }
+    ]
+  },
+  "dimensions": [
+    {
+      "kind": "edge",
+      "name": "genre_propensity",
+      "csv": "panelist_genre_propensity.csv",
+      "join_on": "panelist_id",
+      "edge": "PROPENSITY_FOR_GENRE",
+      "target": { "label": "Genre", "key": "genre" },
+      "columns": [
+        { "name": "panelist_id", "type": "string" },
+        { "name": "genre", "type": "string" },
+        { "name": "propensity", "type": "float" }
+      ]
+    },
+    {
+      "kind": "edge",
+      "name": "slot_propensity",
+      "csv": "panelist_slot_propensity.csv",
+      "join_on": "panelist_id",
+      "edge": "PROPENSITY_FOR_SLOT",
+      "target": { "label": "Slot", "key": "slot" },
+      "columns": [
+        { "name": "panelist_id", "type": "string" },
+        { "name": "slot", "type": "string" },
+        { "name": "propensity", "type": "float" }
+      ]
+    },
+    {
+      "kind": "attribute",
+      "name": "voice_examples",
+      "as": "voice_examples",
+      "csv": "panelist_voice_examples.csv",
+      "join_on": "panelist_id",
+      "columns": [
+        { "name": "panelist_id", "type": "string" },
+        { "name": "idx", "type": "int" },
+        { "name": "example", "type": "string" }
+      ]
+    },
+    {
+      "kind": "attribute",
+      "name": "vocabulary",
+      "as": "vocabulary",
+      "csv": "panelist_vocabulary.csv",
+      "join_on": "panelist_id",
+      "columns": [
+        { "name": "panelist_id", "type": "string" },
+        { "name": "polarity", "type": "string", "enum": ["required", "forbidden"] },
+        { "name": "term", "type": "string" }
+      ]
+    }
+  ],
+  "brief": {
+    "content_id": "mirofish_v2_launch_2026-05-12",
+    "title": "MiroFish v2 — synthetic audience platform for content & product launches",
+    "genre": "synthetic_panels",
+    "slot": "hn_morning_tuesday",
+    "channel": "Hacker News + GitHub",
+    "runtime_minutes": 5,
+    "air_date": "2026-05-12",
+    "synopsis": "MiroFish v2 is an open-source platform for running named, schema-driven synthetic-audience studies. A study is one identity CSV (the panel) plus dimension CSVs (propensities, voice, vocabulary) plus a brief — the thing whose reception you want to predict. The runner projects each row into a persona, scores salience against the brief, walks an engagement gate (DO_NOTHING / LIKE_POST / REPOST / CREATE_POST / REPLY) per round, and emits a markdown report grounded in the panel's recorded behaviour. v2 ships an upload UI, downloadable bundles, an inspectable Neo4j graph per study, a per-study delete, and a build/version badge so you always know which build you're looking at. The pitch is pragmatic: this is not a replacement for recruited panels, it is a hypothesis-pruning tool that lets a strategy desk or product team run twenty cheap studies before commissioning one expensive one. Launching on Hacker News on Tuesday 12 May 2026 with the BBC One Sherwood S2 seed as the headline example.",
+    "rules": [
+      "Strict raters stay strict, generous raters stay generous.",
+      "Every prediction must be traceable to the panelist's recorded behaviour and voice examples in the seed.",
+      "The 10 named panelists are the only participants — do not produce predictions for anyone else.",
+      "Do not invent product features that are not described in the synopsis.",
+      "Distinguish between the product (MiroFish v2) and the example study (Sherwood S2) — reactions should be to the product."
+    ]
+  },
+  "engagement": {
+    "salience_threshold": 0.35,
+    "daily_action_cap": 6,
+    "embedding_model": "text-embedding-3-small"
+  }
+}
