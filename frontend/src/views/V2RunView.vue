@@ -571,10 +571,10 @@ pre.report {
   padding: 14px; border-radius: 8px;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
                "Liberation Mono", "Courier New", monospace;
-  font-size: 13px; line-height: 1.55;
+  font-size: 12.5px; line-height: 1.55;
   white-space: pre;
-  overflow-x: auto;
-  max-height: 640px; overflow-y: auto;
+  overflow: auto;
+  max-height: 720px;
   border: 1px solid #e2e8f0;
 }
 

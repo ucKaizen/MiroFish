@@ -2,6 +2,10 @@ import service from './index'
 
 // All endpoints under /api/v2/* — see backend/app/v2/api.py.
 
+export function getVersion() {
+  return service({ url: '/api/v2/version', method: 'get' })
+}
+
 export function listStudies() {
   return service({ url: '/api/v2/studies', method: 'get' })
 }
