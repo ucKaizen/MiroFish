@@ -36,7 +36,7 @@
           <input
             v-model="newStudyPath"
             type="text"
-            placeholder="seeds/bbc_panel/study.json"
+            placeholder="seeds/v2/bbc_panel/study.json"
             class="grow"
           />
           <button :disabled="!newStudyPath || registering" @click="registerStudy">
@@ -223,7 +223,7 @@ import {
 
 const studies = ref([])
 const selectedStudyId = ref('')
-const newStudyPath = ref('seeds/bbc_panel/study.json')
+const newStudyPath = ref('seeds/v2/bbc_panel/study.json')
 const pickedFile = ref(null)
 
 const registering = ref(false)

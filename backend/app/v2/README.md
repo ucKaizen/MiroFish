@@ -20,13 +20,13 @@ routes still serve the existing UI. The new path is mounted under
 | `narrator.py` | Thin LLM wrap over the metrics + verbatim quotes; offline fallback identical except for narrative paragraph |
 | `cli.py` | `python -m app.v2.cli run --study ... --out ...` |
 | `api.py` | Flask blueprint at `/api/v2/*` |
-| `fixtures/derive_bbc_panel.py` | One-shot — converts tinytroupe-panel/data/*.yaml → seeds/bbc_panel/*.csv |
+| `fixtures/derive_bbc_panel.py` | One-shot — converts tinytroupe-panel/data/*.yaml → seeds/v2/bbc_panel/*.csv |
 
 ## End-to-end CLI
 
 ```bash
 python -m app.v2.cli run \
-    --study seeds/bbc_panel/study.json \
+    --study seeds/v2/bbc_panel/study.json \
     --out   uploads/v2_runs/bbc_panel \
     --rounds 2
 ```
@@ -37,7 +37,7 @@ python -m app.v2.cli run \
 # 1. register a study from disk
 curl -X POST http://localhost:5001/api/v2/studies/from-disk \
     -H 'content-type: application/json' \
-    -d '{"path":"seeds/bbc_panel/study.json"}'
+    -d '{"path":"seeds/v2/bbc_panel/study.json"}'
 
 # 2. start a run
 curl -X POST http://localhost:5001/api/v2/runs \
