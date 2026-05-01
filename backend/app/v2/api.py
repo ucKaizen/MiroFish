@@ -236,6 +236,47 @@ def upload_study() -> Response:
     return jsonify({"success": True, "data": record})
 
 
+@v2_bp.route("/studies/<study_id>", methods=["DELETE"])
+def delete_study(study_id: str) -> Response:
+    """Remove a study from the index and (best-effort) delete its files.
+
+    Files are only removed when the study lives under ``v2_studies/`` (i.e. it
+    was uploaded). Studies registered from a server-side path leave the source
+    directory alone.
+    """
+    items = _index_load()
+    record = next((s for s in items if s["study_id"] == study_id), None)
+    if record is None:
+        return jsonify({"success": False, "error": "unknown study_id"}), 404
+
+    items = [s for s in items if s["study_id"] != study_id]
+    STUDIES_INDEX.write_text(json.dumps(items, indent=2), encoding="utf-8")
+
+    studies_dir = (UPLOADS_ROOT / "v2_studies").resolve()
+    removed_files = False
+    try:
+        study_dir = Path(record["path"]).resolve().parent
+        if studies_dir in study_dir.parents:
+            import shutil
+            # The upload target is the immediate child of v2_studies/. Walk up
+            # to that level so we remove the whole upload, not just a nested
+            # study.json's parent.
+            top = study_dir
+            while top.parent != studies_dir and top.parent in studies_dir.parents:
+                top = top.parent
+            if top.parent == studies_dir:
+                shutil.rmtree(top, ignore_errors=True)
+                removed_files = True
+    except Exception as e:                                  # pragma: no cover
+        logger.warning("delete_study: file cleanup failed for %s: %s",
+                       study_id, e)
+
+    return jsonify({"success": True, "data": {
+        "study_id":     study_id,
+        "removed_files": removed_files,
+    }})
+
+
 @v2_bp.route("/studies/<study_id>/json", methods=["GET"])
 def download_study_json(study_id: str) -> Response:
     """Serve the raw study.json for a registered study as a download."""

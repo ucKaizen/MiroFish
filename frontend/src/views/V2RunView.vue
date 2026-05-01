@@ -57,6 +57,7 @@
             <th>brief</th>
             <th>registered</th>
             <th>files</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -84,6 +85,13 @@
                  :download="`${s.study_id}.zip`"
                  class="link"
                  @click.stop>full .zip</a>
+            </td>
+            <td>
+              <button class="ghost danger"
+                      :disabled="deletingId === s.study_id"
+                      @click.stop="onDeleteStudy(s)">
+                {{ deletingId === s.study_id ? 'Deleting…' : 'Delete' }}
+              </button>
             </td>
           </tr>
         </tbody>
@@ -202,6 +210,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import * as d3 from 'd3'
 import {
+  deleteStudy,
   getGraph,
   getRun,
   getRunLog,
@@ -222,6 +231,7 @@ const registerError = ref('')
 const uploading = ref(false)
 const uploadError = ref('')
 const uploadOk = ref(null)
+const deletingId = ref('')
 
 const running = ref(false)
 const runError = ref('')
@@ -279,6 +289,21 @@ function flatProps(p) {
     out[k] = typeof v === 'object' && v !== null ? JSON.stringify(v, null, 2) : v
   }
   return out
+}
+
+async function onDeleteStudy(s) {
+  if (!s || !s.study_id) return
+  if (!window.confirm(`Delete study "${s.study_id}"? Run history is kept; only the registered study and its uploaded files are removed.`)) return
+  deletingId.value = s.study_id
+  try {
+    await deleteStudy(s.study_id)
+    if (selectedStudyId.value === s.study_id) selectedStudyId.value = ''
+    await refreshStudies()
+  } catch (err) {
+    window.alert('Delete failed: ' + String(err?.response?.data?.error || err?.message || err))
+  } finally {
+    deletingId.value = ''
+  }
 }
 
 async function refreshStudies() {
@@ -562,6 +587,15 @@ button {
   border-radius: 6px; padding: 6px 14px; font-size: 14px; cursor: pointer;
 }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.ghost {
+  background: transparent; color: #1f2937; border-color: #cbd5e1;
+}
+button.ghost.danger {
+  color: #b91c1c; border-color: #fecaca; padding: 4px 10px; font-size: 12px;
+}
+button.ghost.danger:hover:not(:disabled) {
+  background: #fef2f2; border-color: #fca5a5;
+}
 
 table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.grid th, table.grid td {
