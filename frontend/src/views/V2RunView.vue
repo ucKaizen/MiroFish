@@ -24,7 +24,10 @@
       <p v-if="uploadError" class="error">{{ uploadError }}</p>
       <p v-if="uploadOk" class="ok small">
         Uploaded <code>{{ uploadOk.study_id }}</code> at {{ uploadOk.registered_at }}
-        <span v-if="uploadOk.replaced"> (replaced existing entry — same study_id)</span>
+        <span v-if="uploadOk.suffixed">
+          (the file's study_id collided with an existing entry, so it was
+          registered under a suffixed id — both rows are now selectable)
+        </span>
       </p>
 
       <details class="from-disk">
@@ -300,7 +303,6 @@ async function uploadPicked() {
   uploadError.value = ''
   uploadOk.value = null
   uploading.value = true
-  const before = new Set(studies.value.map(s => s.study_id))
   try {
     const res = await uploadStudy(pickedFile.value)
     const rec = res && res.data
@@ -309,7 +311,7 @@ async function uploadPicked() {
       uploadOk.value = {
         study_id:      rec.study_id,
         registered_at: rec.registered_at,
-        replaced:      before.has(rec.study_id),
+        suffixed:      /__\d+$/.test(rec.study_id),
       }
     }
     pickedFile.value = null

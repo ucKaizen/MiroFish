@@ -206,8 +206,20 @@ def upload_study() -> Response:
         shutil.rmtree(target, ignore_errors=True)
         return jsonify({"success": False, "error": f"upload failed: {e}"}), 500
 
+    # Studies are keyed by `study_id`. The id is baked into study.json, so two
+    # different uploads of (a tweaked copy of) the same study would otherwise
+    # silently replace each other. Auto-suffix on collision so uploads are
+    # always additive in the table.
+    existing_ids = {r["study_id"] for r in _index_load()}
+    registered_id = s.study_id
+    if registered_id in existing_ids:
+        n = 2
+        while f"{s.study_id}__{n}" in existing_ids:
+            n += 1
+        registered_id = f"{s.study_id}__{n}"
+
     record = {
-        "study_id":    s.study_id,
+        "study_id":    registered_id,
         "name":        s.name,
         "description": s.description,
         "path":        str(study_dir / "study.json"),
@@ -494,7 +506,7 @@ def _execute_run(run_id: str, study_record: dict[str, Any],
             password = os.environ.get("NEO4J_PASSWORD", "mirofish-local-password")
             gw = GraphWriter(uri, user, password)
             try:
-                stats = gw.write_study(study, graph_id=f"v2_{study.study_id}")
+                stats = gw.write_study(study, graph_id=f"v2_{study_record['study_id']}")
                 log(f"graph: {stats.identity_nodes} nodes, "
                     f"{stats.target_nodes} targets, {stats.edges} edges")
             finally:
