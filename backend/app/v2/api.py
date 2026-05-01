@@ -56,6 +56,38 @@ UPLOADS_ROOT.mkdir(parents=True, exist_ok=True)
 RUNS_ROOT.mkdir(parents=True, exist_ok=True)
 
 
+# ---------- version stamp ----------
+
+def _git_short_sha() -> str:
+    import subprocess
+    try:
+        repo_root = Path(__file__).resolve().parents[3]
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root, capture_output=True, text=True, timeout=2,
+        )
+        if out.returncode == 0:
+            return out.stdout.strip() or "nogit"
+    except Exception:
+        pass
+    return "nogit"
+
+
+_SERVER_GIT_SHA = _git_short_sha()
+_SERVER_STARTED_AT = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+@v2_bp.route("/version", methods=["GET"])
+def version() -> Response:
+    return jsonify({
+        "success": True,
+        "data": {
+            "git_sha":    _SERVER_GIT_SHA,
+            "started_at": _SERVER_STARTED_AT,
+        },
+    })
+
+
 # ---------- in-process state ----------
 
 _runs_lock = threading.Lock()
@@ -158,7 +190,7 @@ def upload_study() -> Response:
                              "error": "expected a .zip or study.json"}), 400
 
         try:
-            s = load_study(study_dir)
+            s = load_study(study_dir / "study.json")
         except Exception as e:
             shutil.rmtree(target, ignore_errors=True)
             return jsonify({"success": False,
