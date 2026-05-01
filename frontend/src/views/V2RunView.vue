@@ -184,7 +184,13 @@
 
     <section v-if="reportMarkdown" class="card">
       <h2>5. Report</h2>
-      <pre class="report">{{ reportMarkdown }}</pre>
+      <div class="report-actions">
+        <button class="ghost" @click="reportRaw = !reportRaw">
+          {{ reportRaw ? 'Show rendered' : 'Show raw markdown' }}
+        </button>
+      </div>
+      <pre v-if="reportRaw" class="report-raw">{{ reportMarkdown }}</pre>
+      <div v-else class="report" v-html="reportHtml"></div>
     </section>
   </div>
 </template>
@@ -192,6 +198,9 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import * as d3 from 'd3'
+import { marked } from 'marked'
+
+marked.setOptions({ gfm: true, breaks: false })
 import {
   getGraph,
   getRun,
@@ -218,6 +227,12 @@ const runError = ref('')
 
 const activeRun = ref(null)
 const reportMarkdown = ref('')
+const reportRaw = ref(false)
+const reportHtml = computed(() => {
+  if (!reportMarkdown.value) return ''
+  try { return marked.parse(reportMarkdown.value) }
+  catch { return '' }
+})
 const graphData = ref(null)
 const graphError = ref('')
 const graphSvg = ref(null)
@@ -566,17 +581,83 @@ pre.log {
   font-size: 12.5px; line-height: 1.4; overflow-x: auto; white-space: pre-wrap;
   max-height: 480px; overflow-y: auto;
 }
-pre.report {
+pre.report-raw {
   background: #f8fafc; color: #1f2937;
   padding: 14px; border-radius: 8px;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
                "Liberation Mono", "Courier New", monospace;
-  font-size: 13px; line-height: 1.55;
+  font-size: 12.5px; line-height: 1.55;
   white-space: pre;
   overflow-x: auto;
   max-height: 640px; overflow-y: auto;
   border: 1px solid #e2e8f0;
 }
+.report-actions { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.report-actions .ghost {
+  background: transparent; color: #2563eb; border: 1px solid #cbd5e1;
+  padding: 4px 10px; font-size: 12px; border-radius: 6px;
+}
+
+.report {
+  background: #ffffff; color: #1f2937;
+  padding: 14px 18px; border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  font-size: 14px; line-height: 1.6;
+  max-height: 720px; overflow: auto;
+}
+.report :deep(h1),
+.report :deep(h2),
+.report :deep(h3) { margin: 18px 0 10px; line-height: 1.25; }
+.report :deep(h1) { font-size: 20px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+.report :deep(h2) { font-size: 17px; }
+.report :deep(h3) { font-size: 15px; color: #374151; }
+.report :deep(p)  { margin: 8px 0; }
+.report :deep(ul),
+.report :deep(ol) { margin: 8px 0 12px 20px; }
+.report :deep(li) { margin: 3px 0; }
+.report :deep(code) {
+  background: #f1f5f9; padding: 1px 5px; border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+}
+.report :deep(pre) {
+  background: #0f172a; color: #e2e8f0; padding: 12px;
+  border-radius: 8px; font-size: 12.5px; line-height: 1.5;
+  overflow-x: auto;
+}
+.report :deep(pre code) { background: transparent; padding: 0; color: inherit; }
+.report :deep(blockquote) {
+  margin: 10px 0; padding: 4px 12px; border-left: 3px solid #cbd5e1;
+  background: #f8fafc; color: #475569;
+}
+.report :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.report :deep(table thead) {
+  background: #f1f5f9;
+}
+.report :deep(table th),
+.report :deep(table td) {
+  border: 1px solid #e2e8f0;
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  white-space: normal;
+}
+.report :deep(table th) {
+  font-weight: 600; color: #1e293b;
+}
+.report :deep(table tbody tr:nth-child(even)) {
+  background: #fafafa;
+}
+.report :deep(a) { color: #2563eb; text-decoration: none; }
+.report :deep(a:hover) { text-decoration: underline; }
 
 .headline { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px;
   background: #f0fdf4; padding: 10px 14px; border-radius: 8px; font-size: 14px; }
