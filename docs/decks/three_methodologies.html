@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Three approaches to media measurement &amp; targeting</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --fg:    #0f172a;
+    --muted: #475569;
+    --line:  #cbd5e1;
+    --soft:  #f1f5f9;
+    --accent:#1d4ed8;
+    --warn:  #b45309;
+    --ok:    #166534;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #ffffff; color: var(--fg);
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.45;
+  }
+  .deck { height: 100%; display: flex; flex-direction: column; }
+
+  /* slide container */
+  .slides { flex: 1; position: relative; overflow: hidden; }
+  .slide {
+    position: absolute; inset: 0;
+    padding: 56px 72px 72px;
+    display: none;
+    overflow: auto;
+  }
+  .slide.active { display: block; }
+
+  /* typography */
+  h1 { font-size: 38px; margin: 0 0 12px; line-height: 1.2; }
+  h2 { font-size: 26px; margin: 0 0 18px; line-height: 1.25; color: var(--fg); }
+  h3 { font-size: 16px; margin: 18px 0 6px; color: var(--muted);
+       text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+  p  { margin: 8px 0; }
+  ul { margin: 8px 0 8px 22px; padding: 0; }
+  li { margin: 4px 0; }
+  .lead { font-size: 18px; color: var(--muted); max-width: 780px; }
+  .small { font-size: 13px; color: var(--muted); }
+
+  code, .mono {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 14px;
+  }
+
+  /* flow box */
+  pre.flow {
+    background: var(--soft);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 14px 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13.5px;
+    line-height: 1.55;
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  /* table */
+  table.compare {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin: 12px 0;
+  }
+  table.compare th, table.compare td {
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table.compare th {
+    background: var(--soft);
+    font-weight: 600;
+  }
+  table.compare tbody tr:nth-child(even) td { background: #fafafa; }
+  .col-1 { color: var(--fg); }
+  .col-2 { color: var(--fg); }
+  .col-3 { color: var(--fg); }
+
+  /* two-column layout */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .cols .col { min-width: 0; }
+  .pros li::marker  { color: var(--ok); }
+  .cons li::marker  { color: var(--warn); }
+
+  /* footer / nav */
+  .bar {
+    border-top: 1px solid var(--line);
+    padding: 10px 18px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    background: #ffffff;
+  }
+  .bar .nav button {
+    border: 1px solid var(--line); background: #fff; color: var(--fg);
+    border-radius: 4px; padding: 4px 10px; font: inherit; cursor: pointer;
+  }
+  .bar .nav button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .bar .nav { display: flex; gap: 8px; }
+  .bar .title { font-weight: 600; color: var(--fg); }
+
+  /* highlights */
+  .pill {
+    display: inline-block;
+    padding: 1px 8px; border-radius: 999px;
+    background: var(--soft); border: 1px solid var(--line);
+    font-size: 12px; color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .accent { color: var(--accent); }
+  .key { background: #fef9c3; padding: 1px 4px; border-radius: 3px; }
+
+  /* print */
+  @media print {
+    .slide { display: block !important; page-break-after: always;
+             position: static; height: auto; padding: 36px 48px; }
+    .bar { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <div class="slides" id="slides">
+
+    <!-- 1 -->
+    <section class="slide active">
+      <h1>Three approaches to media measurement &amp; targeting</h1>
+      <p class="lead">
+        Metered panels, virtual panels, and simulation answer the same
+        business questions with very different data contracts. This deck
+        contrasts the three on data flow, cost, latency, and the trust
+        story you can tell about each.
+      </p>
+      <p class="small" style="margin-top:48px">
+        Use ← / → to navigate. Print to export as PDF.
+      </p>
+    </section>
+
+    <!-- 2 -->
+    <section class="slide">
+      <h2>The same questions, three answers</h2>
+      <p class="lead">
+        Who reaches what. Who buys what. Where to target. Which creative
+        wins. Each methodology is a different bet on where to spend the
+        data budget.
+      </p>
+
+      <h3>Axes of difference</h3>
+      <ul>
+        <li><strong>Inputs</strong> — recruited panel, fused census-scale data, or seed + brief.</li>
+        <li><strong>Latency</strong> — months, weeks, or hours to first result.</li>
+        <li><strong>Granularity</strong> — panel size, fusion resolution, or the seed's identity table.</li>
+        <li><strong>Falsifiability</strong> — what can you point at and say "this is wrong"?</li>
+      </ul>
+
+      <p class="small">
+        Industry tends to ask: how much do I trust the answer, and how
+        fast can I get it? The three methodologies sit at different
+        points on that frontier.
+      </p>
+    </section>
+
+    <!-- 3 -->
+    <section class="slide">
+      <h2>1. Metered panel + purchase data</h2>
+      <span class="pill">classic</span>
+
+      <h3>Data flow</h3>
+<pre class="flow">
+recruited panel  ─┐
+  (~5–20K homes)  │
+                  ├─►  ETL ─►  cleansing ─►  modelling ─►  targeting feed
+device meters    ─┤        (joins, dedup,    (reach,
+  (TV / set-top)  │         attribution)      frequency,
+                  │                           AI, RPS)
+purchase scanner─┘
+  (loyalty, POS)
+</pre>
+
+      <div class="cols">
+        <div class="col">
+          <h3 class="col-1">Strengths</h3>
+          <ul class="pros">
+            <li>Real human behaviour, longitudinal.</li>
+            <li>Audited, currency-grade outputs.</li>
+            <li>Transparent provenance — every row is a real meter read.</li>
+          </ul>
+        </div>
+        <div class="col">
+          <h3 class="col-1">Limits</h3>
+          <ul class="cons">
+            <li>Slow to scale; recruitment is the bottleneck.</li>
+            <li>Expensive; panel cost grows linearly with size.</li>
+            <li>Coverage gaps in long-tail content and channels.</li>
+            <li>Granularity bounded by panel size and stratification.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 -->
+    <section class="slide">
+      <h2>2. Virtual panel (data fusion)</h2>
+      <span class="pill">scaled</span>
+
+      <h3>Data flow</h3>
+<pre class="flow">
+                       ┌─ STEP 1 ─────────────────────────────────────┐
+virtual population     │   Video360 Skeleton  + TAM   ─►   fusion     │
+  (~12M)        ─────► │   (~10M, TV + net)    (~7M)      (linkage    │
+                       │                                  + impute)   │
+                       └──────────────┬───────────────────────────────┘
+                                      │
+                                      ▼
+                       ┌─ STEP 2 ─────────────────────────────────────┐
+                       │  TAM-fused skeleton  +  DAM   +  XMP         │
+                       │     (~10M TV-owners)            (linkage     │
+                       │                                  base)       │
+                       │                                              │
+                       │                  ─►  Video360 Panel          │
+                       └──────────────────────────────────────────────┘
+
+  EXTRA: 20% router-data imputation;
+         DAM device-→-people resolution
+         (Dirac Mixture / ADF / Exponential Bow / Dirac Bow)
+</pre>
+
+      <div class="cols">
+        <div class="col">
+          <h3>Strengths</h3>
+          <ul class="pros">
+            <li>Census-scale coverage from existing feeds.</li>
+            <li>Single source of truth across screens (TV + digital).</li>
+            <li>Reuses TAM/DAM investments rather than replacing them.</li>
+          </ul>
+        </div>
+        <div class="col">
+          <h3>Limits</h3>
+          <ul class="cons">
+            <li>Heavy ETL; fusion quality bounds output quality.</li>
+            <li>Needs all source feeds present and aligned.</li>
+            <li>Fusion artefacts can hide where coverage is thin.</li>
+            <li>Per-device-class re-runs (PC, smartphone, tablet).</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section class="slide">
+      <h2>3. Simulation (AI-first)</h2>
+      <span class="pill">emerging</span>
+
+      <h3>Data flow</h3>
+<pre class="flow">
+seed                  ─►  graph DB (Neo4j)
+  panel CSVs              one node per panelist
+  brief / stimulus        edges = propensities         engagement
+  rules                                       ─►       runner    ─►  posts.jsonl
+                                                       (OASIS-              decisions.jsonl
+                                                        shaped)             metrics.json
+                                                                            report.md
+
+  no recruited panel.   no fusion.   the seed is the contract.
+</pre>
+
+      <div class="cols">
+        <div class="col">
+          <h3>Strengths</h3>
+          <ul class="pros">
+            <li>Hours to first result; cheap to re-run.</li>
+            <li>Explainable per-agent — every decision has a trace.</li>
+            <li>Can model scenarios that have not happened yet.</li>
+            <li>Reproducible — same seed, same world.</li>
+          </ul>
+        </div>
+        <div class="col">
+          <h3>Limits</h3>
+          <ul class="cons">
+            <li>It is a prediction, not a measurement.</li>
+            <li>Output quality bounded by the seed's behavioural fidelity.</li>
+            <li>No ground truth on its own. Needs a peg.</li>
+            <li>LLM drift; non-deterministic without locked seeds + caches.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6 -->
+    <section class="slide">
+      <h2>Side-by-side</h2>
+      <table class="compare">
+        <thead>
+          <tr>
+            <th></th>
+            <th>1. Metered panel</th>
+            <th>2. Virtual panel</th>
+            <th>3. Simulation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><th>Primary input</th>
+              <td>Recruited households + meters + scanner data</td>
+              <td>TAM, DAM, XMP fused onto a virtual-population skeleton</td>
+              <td>Seed CSV / JSON + brief + rules</td></tr>
+          <tr><th>Time to first result</th>
+              <td>Months (recruitment, fielding)</td>
+              <td>Weeks (ETL + fusion runs)</td>
+              <td>Hours</td></tr>
+          <tr><th>Cost shape</th>
+              <td>Linear in panel size</td>
+              <td>Fixed pipeline + licensing</td>
+              <td>Mostly compute / LLM tokens</td></tr>
+          <tr><th>Coverage</th>
+              <td>Bounded by panel</td>
+              <td>Census-scale</td>
+              <td>Bounded by seed; trivially extendable</td></tr>
+          <tr><th>Granularity</th>
+              <td>Per real household</td>
+              <td>Per fused virtual person</td>
+              <td>Per seeded persona</td></tr>
+          <tr><th>Falsifiability</th>
+              <td>Direct — re-measure</td>
+              <td>Indirect — fusion residuals</td>
+              <td>Needs a peg metric</td></tr>
+          <tr><th>Best at</th>
+              <td>Currency, audit, attribution</td>
+              <td>Cross-screen reach + targeting</td>
+              <td>Hypothesis triage, scenario testing</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 7 -->
+    <section class="slide">
+      <h2>The trust problem with simulation</h2>
+      <p class="lead">
+        "Simulated reach" alone is unfalsifiable. Anyone asked to bet
+        budget on it will reasonably ask: <em>compared to what?</em>
+      </p>
+
+      <h3>The peg pattern</h3>
+      <p>
+        For every simulated metric, emit one corresponding <span class="key">measurable</span>
+        metric in the same run. The measurable becomes the
+        <strong>reliability indicator</strong> — its real-world value can be
+        looked up, and the gap (or correlation over time) is the trust signal.
+      </p>
+
+<pre class="flow">
+  simulated metric              measurable peg                 reliability indicator
+  ─────────────────             ──────────────────             ────────────────────────
+  reach                    ─►   downloads / internet traffic   ratio sim/measured = R
+  engagement (likes etc.)  ─►   shares, comments, time-on      delta over rolling window
+  appreciation index       ─►   star ratings, NPS, returns     RMSE vs reported AI
+  purchase intent          ─►   cart adds, coupon redemption   conversion-rate ratio
+  reply / discussion       ─►   forum post counts, search      lift vs baseline
+</pre>
+
+      <p class="small">
+        The peg does not need to be perfect. It needs to be
+        <em>independently observable</em> so the simulation can be
+        scored against something the audience already trusts.
+      </p>
+    </section>
+
+    <!-- 8 -->
+    <section class="slide">
+      <h2>What this buys us</h2>
+
+      <div class="cols">
+        <div class="col">
+          <h3>Positioning</h3>
+          <ul>
+            <li>Not "replace the panel" — <strong>triage</strong> what is worth a panel.</li>
+            <li>Not "replace fusion" — <strong>extend</strong> where fusion has thin coverage.</li>
+            <li>Not "ground truth" — <strong>hypothesis pruning</strong> with a reliability indicator.</li>
+          </ul>
+        </div>
+        <div class="col">
+          <h3>Operating model</h3>
+          <ul>
+            <li>Run twenty cheap simulations.</li>
+            <li>Commission one expensive panel for what survives.</li>
+            <li>Track the sim-vs-peg ratio over time; promote sims as the ratio stabilises.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 style="margin-top:28px">A worked example</h3>
+      <p>
+        A streamer wants to predict reach for a Sunday 21:00 drama launch.
+        Run the simulation against a 10-panelist seed; emit
+        <span class="mono">simulated_reach</span> alongside
+        <span class="mono">predicted_iplayer_starts</span>. The day after
+        launch, fetch real iPlayer starts from the existing reporting
+        pipeline. The ratio is the reliability indicator for this genre.
+      </p>
+    </section>
+
+    <!-- 9 -->
+    <section class="slide">
+      <h2>When to use which</h2>
+      <table class="compare">
+        <thead>
+          <tr><th>Need</th><th>Pick</th><th>Why</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Currency-grade audit / contractual reporting</td>
+              <td>1. Metered panel</td>
+              <td>Only directly measured data clears the bar.</td></tr>
+          <tr><td>Cross-screen single source of truth at scale</td>
+              <td>2. Virtual panel</td>
+              <td>Fusion is the only path to census-scale per-person.</td></tr>
+          <tr><td>Fast hypothesis triage, "what if" scenarios, creative testing</td>
+              <td>3. Simulation</td>
+              <td>Hours not weeks; cheap to re-run; explainable.</td></tr>
+          <tr><td>Long-tail content / niche audiences</td>
+              <td>2 + 3</td>
+              <td>Fusion thins out; simulation extends with seeded personas.</td></tr>
+          <tr><td>Predicting a launch that has not happened</td>
+              <td>3 (with peg)</td>
+              <td>Only simulation can answer pre-launch; the peg builds trust.</td></tr>
+        </tbody>
+      </table>
+      <p class="small">
+        These are not exclusive. The mature operating model uses all three —
+        each answers a different question.
+      </p>
+    </section>
+
+    <!-- 10 -->
+    <section class="slide">
+      <h2>Where this leaves us</h2>
+
+      <h3>What's true today</h3>
+      <ul>
+        <li>Metered panels remain the audit currency.</li>
+        <li>Fusion is the production answer for cross-screen scale.</li>
+        <li>Simulation is fast, cheap, and explainable — but unfalsifiable on its own.</li>
+      </ul>
+
+      <h3>What we propose</h3>
+      <ul>
+        <li>Adopt the <strong>peg pattern</strong>: every simulated metric ships with a measurable counterpart.</li>
+        <li>Track sim-vs-measured ratios over time; promote sims to decision input as ratios stabilise.</li>
+        <li>Use simulation for triage and scenarios; keep panel + fusion for currency and scale.</li>
+      </ul>
+
+      <h3>Open questions</h3>
+      <ul>
+        <li>Which peg metrics are routinely available, by client and vertical?</li>
+        <li>What ratio variance is acceptable to call a sim "trusted" for a given decision class?</li>
+        <li>How do we govern seed updates so simulations stay current without losing reproducibility?</li>
+      </ul>
+    </section>
+
+  </div>
+
+  <div class="bar">
+    <div class="title">Three approaches — measurement &amp; targeting</div>
+    <div><span id="counter">1 / 10</span></div>
+    <div class="nav">
+      <button id="prev">prev</button>
+      <button id="next">next</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const counter = document.getElementById('counter');
+  const prev = document.getElementById('prev');
+  const next = document.getElementById('next');
+  let i = 0;
+
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, k) => s.classList.toggle('active', k === i));
+    counter.textContent = (i + 1) + ' / ' + slides.length;
+    prev.disabled = i === 0;
+    next.disabled = i === slides.length - 1;
+    history.replaceState(null, '', '#' + (i + 1));
+  }
+
+  prev.addEventListener('click', () => show(i - 1));
+  next.addEventListener('click', () => show(i + 1));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      e.preventDefault(); show(i + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault(); show(i - 1);
+    } else if (e.key === 'Home') {
+      e.preventDefault(); show(0);
+    } else if (e.key === 'End') {
+      e.preventDefault(); show(slides.length - 1);
+    }
+  });
+
+  // Open at #N if present.
+  const m = (location.hash || '').match(/^#(\d+)$/);
+  show(m ? parseInt(m[1], 10) - 1 : 0);
+})();
+</script>
+
+</body>
+</html>
